@@ -254,6 +254,10 @@ func ReadRepository(repo *git.Repository, createMajor bool) (*Repository, error)
 }
 
 func (repository *Repository) Release(backend Backend) error {
+	if repository.unreleased == "" {
+		log.Printf("[semanticore] no unreleased release commit found, skipping release creation")
+		return nil
+	}
 	if err := backend.Release(repository.Latest, repository.unreleased, repository.unreleasedChangelog); err != nil {
 		return fmt.Errorf("unable to release %s at %s: %w", repository.Latest, repository.unreleased, err)
 	}
