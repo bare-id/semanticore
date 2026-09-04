@@ -98,6 +98,75 @@ If none of these is set, Semanticore will use `Semanticore Bot` as name and `sem
 To configure the name of the changelog file, you can use the `CHANGELOG_FILE_NAME`. environment variable. If this variable is not set,
 the default value `Changelog.md` will be used.
 
+### Optional LLM-powered release notes
+
+Semanticore can optionally generate a human-friendly release-note summary for the release pull request while keeping the generated changelog file unchanged.
+
+Enable it with any of the following flags or environment variables:
+
+* `-release-notes-enabled` / `SEMANTICORE_RELEASE_NOTES_ENABLED=true`
+* `-release-notes-provider` / `SEMANTICORE_RELEASE_NOTES_PROVIDER=openai|ollama`
+* `-release-notes-endpoint` / `SEMANTICORE_RELEASE_NOTES_ENDPOINT=https://api.openai.com/v1` or `http://localhost:11434`
+* `-release-notes-model` / `SEMANTICORE_RELEASE_NOTES_MODEL=gpt-4o-mini` or `llama3.1`
+* `-release-notes-api-key` / `SEMANTICORE_RELEASE_NOTES_API_KEY=...`
+* `-release-notes-prompt` / `SEMANTICORE_RELEASE_NOTES_PROMPT=...`
+* `-release-notes-prompt-file` / `SEMANTICORE_RELEASE_NOTES_PROMPT_FILE=.gitlab/release-notes-prompt.txt`
+
+The prompt is read from a local file when available. Semanticore checks for these repository-local defaults in order:
+
+* `.gitlab/release-notes-prompt.txt`
+* `.github/release-notes-prompt.txt`
+* `release-notes-prompt.txt`
+
+This lets teams keep the prompt versioned in the repository. If you set `-release-notes-prompt` or `SEMANTICORE_RELEASE_NOTES_PROMPT`, it overrides the file. The generated release notes are added to the merge request text and are not written into `Changelog.md`.
+
+### Dry run
+
+Use `-dry-run` or `SEMANTICORE_DRY_RUN=true` to preview the generated changelog and release notes without changing the repository or creating the MR.
+
+```bash
+export SEMANTICORE_DRY_RUN=true
+export SEMANTICORE_RELEASE_NOTES_ENABLED=true
+export SEMANTICORE_RELEASE_NOTES_PROVIDER=ollama
+export SEMANTICORE_RELEASE_NOTES_ENDPOINT=http://localhost:11434
+export SEMANTICORE_RELEASE_NOTES_MODEL=llama3.1
+
+go run .
+```
+
+This prints the changelog and the generated release notes to stdout and exits before any commit, push, or merge request is created.
+
+Example for OpenAI:
+
+```bash
+export SEMANTICORE_RELEASE_NOTES_ENABLED=true
+export SEMANTICORE_RELEASE_NOTES_PROVIDER=openai
+export SEMANTICORE_RELEASE_NOTES_ENDPOINT=https://api.openai.com/v1
+export SEMANTICORE_RELEASE_NOTES_MODEL=gpt-4o-mini
+export SEMANTICORE_RELEASE_NOTES_API_KEY=your-key
+```
+
+Example for Ollama:
+
+```bash
+export SEMANTICORE_RELEASE_NOTES_ENABLED=true
+export SEMANTICORE_RELEASE_NOTES_PROVIDER=ollama
+export SEMANTICORE_RELEASE_NOTES_ENDPOINT=http://localhost:11434
+export SEMANTICORE_RELEASE_NOTES_MODEL=llama3.1
+```
+
+Example prompt template:
+
+```text
+Write a concise release summary for a software project.
+Use the changelog below as the source of truth.
+Focus on customer impact, highlight key changes, and mention migration notes when relevant.
+
+{{CHANGELOG}}
+
+{{ISSUES}}
+```
+
 ### Change label synchronization
 
 Semanticore can propagate a `change::...` label to the release MR/PR.

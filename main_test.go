@@ -85,3 +85,10 @@ func TestParseChangeLabelMap(t *testing.T) {
 	_, ok = parseChangeLabelMap("feat-change::normal", priority)
 	assert.False(t, ok)
 }
+
+func TestRenderDryRunOutput(t *testing.T) {
+	out := renderDryRunOutput("# Changelog\n\n## Version v1.2.3", "## Release notes\n\n- improved release notes")
+	assert.Contains(t, out, "# Changelog")
+	assert.Contains(t, out, "## Release notes")
+	assert.Contains(t, out, "dry-run")
+}

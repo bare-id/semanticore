@@ -27,21 +27,29 @@ func try(err error) {
 }
 
 var (
-	useBackend          = flag.String("backend", os.Getenv("SEMANTICORE_BACKEND"), "configure backend use either \"github\" or \"gitlab\" - we'll try to autodetect if empty")
-	createMajor         = flag.Bool("major", false, "release major versions")
-	createRelease       = flag.Bool("release", true, "create release alongside tags")
-	createMergeRequest  = flag.Bool("merge-request", true, "create merge release for branch")
-	authorName          = flag.String("git-author-name", emptyFallback(os.Getenv("GIT_AUTHOR_NAME"), "Semanticore Bot"), "author name for the git commits, falls back to env var GIT_AUTHOR_NAME and afterwards to \"Semanticore Bot\"")
-	authorEmail         = flag.String("git-author-email", emptyFallback(os.Getenv("GIT_AUTHOR_EMAIL"), "semanticore@aoe.com"), "author email for the git commits, falls back to env var GIT_AUTHOR_EMAIL and afterwards to \"semanticore@aoe.com\"")
-	committerName       = flag.String("git-committer-name", emptyFallback(os.Getenv("GIT_COMMITTER_NAME"), "Semanticore Bot"), "committer name for the git commits, falls back to env var GIT_COMMITTER_NAME and afterwards to \"Semanticore Bot\"")
-	committerEmail      = flag.String("git-committer-email", emptyFallback(os.Getenv("GIT_COMMITTER_EMAIL"), "semanticore@aoe.com"), "committer email for the git commits, falls back to env var GIT_COMMITTER_EMAIL and afterwards to \"semanticore@aoe.com\"")
-	changelogMaxLines   = flag.Int("changelog-max-lines", 0, "trim the changelog to the last version including the maximum configured lines")
-	changelogFileName   = flag.String("changelog-file-name", emptyFallback(os.Getenv("CHANGELOG_FILE_NAME"), "Changelog.md"), "filename for changelog, falls back to env var CHANGELOG_FILE_NAME and afterwards to \"Changelog.md\"")
-	signKeyFilePath     = flag.String("sign-key-file", emptyFallback(os.Getenv("SEMANTICORE_SIGN_KEY_FILE"), ""), "path to GPG private key file for signing commits")
-	changeLabelsEnabled = flag.Bool("change-labels-enabled", strings.EqualFold(os.Getenv("SEMANTICORE_CHANGE_LABELS_ENABLED"), "true"), "enable change label sync for merge requests")
-	changeLabels        = flag.String("change-labels", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABELS"), ""), "CSV list of labels in priority order (highest first), e.g. change::emergency,change::major,change::normal,change::standard")
-	changeLabelMap      = flag.String("change-label-map", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABEL_MAP"), ""), "CSV list mapping semantic commit types to labels, e.g. feat=change::normal,chore=change::standard")
-	changeLabelDefault  = flag.String("change-label-default", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABEL_DEFAULT"), ""), "label to use when no commit label matches; must be in --change-labels")
+	useBackend             = flag.String("backend", os.Getenv("SEMANTICORE_BACKEND"), "configure backend use either \"github\" or \"gitlab\" - we'll try to autodetect if empty")
+	createMajor            = flag.Bool("major", false, "release major versions")
+	createRelease          = flag.Bool("release", true, "create release alongside tags")
+	createMergeRequest     = flag.Bool("merge-request", true, "create merge release for branch")
+	dryRun                 = flag.Bool("dry-run", strings.EqualFold(os.Getenv("SEMANTICORE_DRY_RUN"), "true"), "print the generated changelog and release notes to stdout and skip creating the merge request, release commit, or push")
+	authorName             = flag.String("git-author-name", emptyFallback(os.Getenv("GIT_AUTHOR_NAME"), "Semanticore Bot"), "author name for the git commits, falls back to env var GIT_AUTHOR_NAME and afterwards to \"Semanticore Bot\"")
+	authorEmail            = flag.String("git-author-email", emptyFallback(os.Getenv("GIT_AUTHOR_EMAIL"), "semanticore@aoe.com"), "author email for the git commits, falls back to env var GIT_AUTHOR_EMAIL and afterwards to \"semanticore@aoe.com\"")
+	committerName          = flag.String("git-committer-name", emptyFallback(os.Getenv("GIT_COMMITTER_NAME"), "Semanticore Bot"), "committer name for the git commits, falls back to env var GIT_COMMITTER_NAME and afterwards to \"Semanticore Bot\"")
+	committerEmail         = flag.String("git-committer-email", emptyFallback(os.Getenv("GIT_COMMITTER_EMAIL"), "semanticore@aoe.com"), "committer email for the git commits, falls back to env var GIT_COMMITTER_EMAIL and afterwards to \"semanticore@aoe.com\"")
+	changelogMaxLines      = flag.Int("changelog-max-lines", 0, "trim the changelog to the last version including the maximum configured lines")
+	changelogFileName      = flag.String("changelog-file-name", emptyFallback(os.Getenv("CHANGELOG_FILE_NAME"), "Changelog.md"), "filename for changelog, falls back to env var CHANGELOG_FILE_NAME and afterwards to \"Changelog.md\"")
+	releaseNotesEnabled    = flag.Bool("release-notes-enabled", strings.EqualFold(os.Getenv("SEMANTICORE_RELEASE_NOTES_ENABLED"), "true"), "generate release notes with an LLM and include them in the release pull request")
+	releaseNotesProvider   = flag.String("release-notes-provider", emptyFallback(os.Getenv("SEMANTICORE_RELEASE_NOTES_PROVIDER"), "openai"), "LLM provider to use for release notes, e.g. \"openai\" or \"ollama\"")
+	releaseNotesEndpoint   = flag.String("release-notes-endpoint", emptyFallback(os.Getenv("SEMANTICORE_RELEASE_NOTES_ENDPOINT"), ""), "API endpoint for the release-notes LLM provider")
+	releaseNotesModel      = flag.String("release-notes-model", emptyFallback(os.Getenv("SEMANTICORE_RELEASE_NOTES_MODEL"), ""), "model name for the release-notes LLM provider")
+	releaseNotesAPIKey     = flag.String("release-notes-api-key", emptyFallback(os.Getenv("SEMANTICORE_RELEASE_NOTES_API_KEY"), ""), "API key used by the release-notes LLM provider")
+	releaseNotesPrompt     = flag.String("release-notes-prompt", emptyFallback(os.Getenv("SEMANTICORE_RELEASE_NOTES_PROMPT"), ""), "custom prompt template used to generate release notes; if empty, a repository-local file is used when present")
+	releaseNotesPromptFile = flag.String("release-notes-prompt-file", emptyFallback(os.Getenv("SEMANTICORE_RELEASE_NOTES_PROMPT_FILE"), ""), "path to a local file containing the release-notes prompt; defaults to .gitlab/release-notes-prompt.txt or .github/release-notes-prompt.txt")
+	signKeyFilePath        = flag.String("sign-key-file", emptyFallback(os.Getenv("SEMANTICORE_SIGN_KEY_FILE"), ""), "path to GPG private key file for signing commits")
+	changeLabelsEnabled    = flag.Bool("change-labels-enabled", strings.EqualFold(os.Getenv("SEMANTICORE_CHANGE_LABELS_ENABLED"), "true"), "enable change label sync for merge requests")
+	changeLabels           = flag.String("change-labels", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABELS"), ""), "CSV list of labels in priority order (highest first), e.g. change::emergency,change::major,change::normal,change::standard")
+	changeLabelMap         = flag.String("change-label-map", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABEL_MAP"), ""), "CSV list mapping semantic commit types to labels, e.g. feat=change::normal,chore=change::standard")
+	changeLabelDefault     = flag.String("change-label-default", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABEL_DEFAULT"), ""), "label to use when no commit label matches; must be in --change-labels")
 )
 
 func main() {
@@ -92,6 +100,16 @@ func main() {
 		}
 	}
 
+	releaseNotesCfg := internal.NewReleaseNotesConfig(
+		*releaseNotesEnabled,
+		*releaseNotesProvider,
+		*releaseNotesEndpoint,
+		*releaseNotesModel,
+		*releaseNotesAPIKey,
+		*releaseNotesPrompt,
+		*releaseNotesPromptFile,
+	)
+
 	changelog := repository.Changelog()
 
 	if changelog == "" {
@@ -100,6 +118,19 @@ func main() {
 	}
 
 	fmt.Println(changelog)
+
+	if *dryRun {
+		releaseNotesText := ""
+		if releaseNotesCfg.Enabled {
+			var err error
+			releaseNotesText, err = releaseNotesCfg.Generate(changelog, repository.IssueRefs())
+			if err != nil {
+				log.Printf("[semanticore] unable to generate release notes: %v", err)
+			}
+		}
+		fmt.Print(renderDryRunOutput(changelog, releaseNotesText))
+		return
+	}
 
 	if !*createMergeRequest {
 		return
@@ -170,6 +201,14 @@ func main() {
 		Mode:   git.HardReset,
 	}))
 
+	releaseNotesText := ""
+	if releaseNotesCfg.Enabled {
+		releaseNotesText, err = releaseNotesCfg.Generate(changelog, repository.IssueRefs())
+		if err != nil {
+			log.Printf("[semanticore] unable to generate release notes: %v", err)
+		}
+	}
+
 	if backend == nil {
 		log.Printf("no backend configured, keeping changes in a local commit: %s", commit.String())
 		return
@@ -207,6 +246,11 @@ func main() {
 			log.Printf("[semanticore] change labels are enabled but SEMANTICORE_CHANGE_LABELS is invalid, disabling feature")
 		}
 	}
+	releaseNotesSection := ""
+	if strings.TrimSpace(releaseNotesText) != "" {
+		releaseNotesSection = fmt.Sprintf("\n## Release notes\n\n%s\n\n", strings.TrimSpace(releaseNotesText))
+	}
+
 	description := fmt.Sprintf(`# Release %s%d.%d.%d 🏆
 
 ## Summary
@@ -217,17 +261,28 @@ This is a %s release.
 
 Merge this pull request to commit the changelog and have Semanticore create a new release on the next pipeline run.
 
-%s
-
+%s%s
 ---
 
 This changelog was generated by your friendly [Semanticore Release Bot](https://github.com/bare-id/semanticore)
-`, repository.VPrefix, repository.Major, repository.Minor, repository.Patch, strings.Join(repository.Details, ", "), repository.Latest, releasetype, strings.TrimSpace(changelog))
+`, repository.VPrefix, repository.Major, repository.Minor, repository.Patch, strings.Join(repository.Details, ", "), repository.Latest, releasetype, releaseNotesSection, strings.TrimSpace(changelog))
 
 	mainBranch, err := backend.MainBranch()
 	try(err)
 
 	try(backend.MergeRequest(string(mainBranch), fmt.Sprintf("Release %s%d.%d.%d", repository.VPrefix, repository.Major, repository.Minor, repository.Patch), description, labels))
+}
+
+func renderDryRunOutput(changelog, releaseNotesText string) string {
+	var out strings.Builder
+	out.WriteString(changelog)
+	if strings.TrimSpace(releaseNotesText) != "" {
+		out.WriteString("\n## Release notes\n\n")
+		out.WriteString(strings.TrimSpace(releaseNotesText))
+		out.WriteString("\n")
+	}
+	out.WriteString("\n[dry-run] semanticore skipped changelog file updates, commit creation, push, and merge request creation.\n")
+	return out.String()
 }
 
 func emptyFallback(s, fallback string) string {

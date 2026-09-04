@@ -366,3 +366,7 @@ func (repository *Repository) Changelog() string {
 func (repository *Repository) Version() string {
 	return fmt.Sprintf("%s%d.%d.%d", repository.VPrefix, repository.Major, repository.Minor, repository.Patch)
 }
+
+func (repository *Repository) IssueRefs() []int {
+	return append([]int(nil), repository.issueRefs...)
+}
