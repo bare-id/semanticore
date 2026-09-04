@@ -28,18 +28,20 @@ func TestNpmUpdateVersionHook(t *testing.T) {
 	err = mockRepo.SetConfig(cfg)
 	assert.NoError(t, err)
 
-	mockRepo.CreateBranch(&config.Branch{Name: "main"})
+	assert.NoError(t, mockRepo.CreateBranch(&config.Branch{Name: "main"}))
 	mockWt, err := mockRepo.Worktree()
 	assert.NoError(t, err)
 
-	mockWt.Checkout(&git.CheckoutOptions{Branch: "main"})
+	_ = mockWt.Checkout(&git.CheckoutOptions{Branch: "main"})
 
 	file, err := mockWt.Filesystem.Create("test.file")
 	assert.NoError(t, err)
 
 	testCommit := func(msg string) plumbing.Hash {
-		file.Write([]byte("msg"))
-		mockWt.Add("test.file")
+		_, err := file.Write([]byte("msg"))
+		assert.NoError(t, err)
+		_, err = mockWt.Add("test.file")
+		assert.NoError(t, err)
 		hash, err := mockWt.Commit(msg, &git.CommitOptions{})
 		assert.NoError(t, err)
 		return hash
@@ -51,8 +53,9 @@ func TestNpmUpdateVersionHook(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = packagejson.Write([]byte(`{"foo": "bar",    "version": 	"1.2.3" , "dependencies": {"foo": "1.2.3"}  }`))
 	assert.NoError(t, err)
-	packagejson.Close()
-	mockWt.Add("package.json")
+	assert.NoError(t, packagejson.Close())
+	_, err = mockWt.Add("package.json")
+	assert.NoError(t, err)
 	testCommit("test(semanticore): initial commit")
 
 	repository, err := internal.ReadRepository(mockRepo, true)
@@ -72,7 +75,7 @@ func TestNpmUpdateVersionHook(t *testing.T) {
 		} `json:"dependencies"`
 	}
 	assert.NoError(t, json.Unmarshal(b, &jsonData), "can not read json: %s", b)
-	packagejson.Close()
+	assert.NoError(t, packagejson.Close())
 	assert.Equal(t, "4.5.6", jsonData.Version, "json content does not match: %s", b)
 	assert.Equal(t, "1.2.3", jsonData.Dependencies.Foo, "dependency version was updated: %s", b)
 }

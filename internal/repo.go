@@ -73,7 +73,7 @@ func ReadRepository(repo *git.Repository, createMajor bool) (*Repository, error)
 
 	vregex := regexp.MustCompile(`(v?)(\d+).(\d+).(\d+)`)
 	var ancestor *object.Commit
-	glog.ForEach(func(c *object.Commit) error {
+	_ = glog.ForEach(func(c *object.Commit) error {
 		if tags, ok := tags[c.Hash.String()]; ok {
 			for _, tag := range tags {
 				match := vregex.FindStringSubmatch(tag.Name().String())
@@ -114,7 +114,7 @@ func ReadRepository(repo *git.Repository, createMajor bool) (*Repository, error)
 	}
 
 	var logs []*object.Commit
-	object.NewCommitIterBSF(headCommit, seen, ignore).ForEach(func(c *object.Commit) error {
+	_ = object.NewCommitIterBSF(headCommit, seen, ignore).ForEach(func(c *object.Commit) error {
 		if a, _ := c.IsAncestor(ancestor); a {
 			return storer.ErrStop
 		}
@@ -153,7 +153,7 @@ func ReadRepository(repo *git.Repository, createMajor bool) (*Repository, error)
 
 			fi, err := commit.Files()
 			if err == nil {
-				fi.ForEach(func(f *object.File) error {
+				_ = fi.ForEach(func(f *object.File) error {
 					if strings.ToLower(f.Name) == "changelog.md" {
 						c, _ := f.Contents()
 						repository.unreleasedChangelog = "## Version " + strings.Split(c, "## Version ")[1]

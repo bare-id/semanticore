@@ -56,12 +56,14 @@ func loadGPGEntityFromFile(keyPath string) (*openpgp.Entity, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open GPG key file: %w", err)
 	}
-	defer keyFile.Close()
+	defer func() { _ = keyFile.Close() }()
 
 	keyring, err := openpgp.ReadArmoredKeyRing(keyFile)
 	if err != nil {
 		// Try reading as binary format if armored reading fails
-		keyFile.Seek(0, 0)
+		if _, err := keyFile.Seek(0, 0); err != nil {
+			return nil, fmt.Errorf("failed to seek GPG key file: %w", err)
+		}
 		keyring, err = openpgp.ReadKeyRing(keyFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read GPG key: %w", err)
