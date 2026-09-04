@@ -24,7 +24,6 @@ jobs:
     name: Tests
     permissions:
       contents: read
-      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup Go
@@ -47,12 +46,21 @@ jobs:
           indicators: true
           output: both
           thresholds: '50 75'
-      - name: Add Coverage PR Comment
-        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
         if: github.event_name == 'pull_request'
         with:
-          recreate: true
+          name: coverage-report
           path: code-coverage-results.md
+      - name: Save PR number
+        if: github.event_name == 'pull_request'
+        run: echo ${{ github.event.number }} > pr-number.txt
+      - name: Upload PR number
+        uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request'
+        with:
+          name: pr-number
+          path: pr-number.txt
 
   static-checks:
     runs-on: ubuntu-latest
