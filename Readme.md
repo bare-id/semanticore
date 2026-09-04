@@ -56,8 +56,8 @@ you need a Personal Access Token (PAT) instead:
 2. Set **Resource owner** to the org or user that owns the repository.
 3. Under **Repository access** choose *Only select repositories* and pick your repository.
 4. Grant these **Repository permissions**:
-   - **Contents**: Read and write (tags, commits, releases)
-   - **Pull requests**: Read and write (the Release pull request)
+   - **Contents**: Read and write — this single permission covers tags, commits and releases
+   - **Pull requests**: Read and write — for the Release pull request
 5. Generate the token and copy it.
 6. In the repository go to **Settings → Secrets and variables → Actions → New repository secret**
    and add it as `SEMANTICORE_TOKEN`.

@@ -75,7 +75,9 @@ func main() {
 	try(err)
 
 	if backend != nil && *createRelease {
-		try(repository.Release(backend))
+		if err := repository.Release(backend); err != nil {
+			log.Printf("[semanticore] unable to create release: %v", err)
+		}
 	}
 
 	changelog := repository.Changelog()
