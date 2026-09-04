@@ -127,7 +127,7 @@ semanticore:
   variables:
     GOTOOLCHAIN: auto
   script:
-    - go run github.com/aoepeople/semanticore@v0
+    - go run github.com/bare-id/semanticore@v0
   only:
     - main
 ```
