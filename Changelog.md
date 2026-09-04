@@ -1,5 +1,17 @@
 # Changelog
 
+## Version v0.8.1 (2026-09-04)
+
+### Fixes
+
+- avoid failing on empty releases (c8d1c5b4)
+- **ci:** use SEMANTICORE_TOKEN rather than GITHUB_TOKEN (e7e71ec0)
+
+### Chores and tidying
+
+- apply default linter config and fix related errors (cfb00c4c)
+- **deps:** upgrade all depdencies and workflows to an up-to-date version (1214dcf1)
+
 ## Version v0.8.0 (2025-09-24)
 
 ### Features
@@ -95,13 +107,3 @@
 
 - **deps:** update module go to 1.19 (c9530fde)
 - **deps:** update irongut/codecoveragesummary action to v1.3.0 (481e6255)
-
-## Version v0.4.0 (2022-06-14)
-
-### Features
-
-- **cli:** add backend flag to allow configuration if autodetection doesn't work (ada14bf7)
-
-### Fixes
-
-- **deps:** update module github.com/stretchr/testify to v1.7.2 (67a18a1c)
