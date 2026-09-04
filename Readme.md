@@ -44,6 +44,31 @@ To enable support for major releases (breaking APIs), use the `-major` flag.
 
 The `SEMANTICORE_TOKEN` is required - that's a Gitlab or Github Token which has basic contributor rights and allows to perform the related Git and API operations.
 
+### Creating a GitHub token (fine-grained PAT)
+
+On GitHub the built-in `GITHUB_TOKEN` works for opening the Release pull request and
+creating tags, but events it produces **do not trigger other workflows** (GitHub
+prevents this to avoid recursion). If you want a tag created by Semanticore to start
+a downstream workflow — for example a `release.yml` that builds and attaches binaries —
+you need a Personal Access Token (PAT) instead:
+
+1. Go to **Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token**.
+2. Set **Resource owner** to the org or user that owns the repository.
+3. Under **Repository access** choose *Only select repositories* and pick your repository.
+4. Grant these **Repository permissions**:
+   - **Contents**: Read and write (tags, commits, releases)
+   - **Pull requests**: Read and write (the Release pull request)
+5. Generate the token and copy it.
+6. In the repository go to **Settings → Secrets and variables → Actions → New repository secret**
+   and add it as `SEMANTICORE_TOKEN`.
+7. Reference it in your workflow:
+
+   ```yaml
+   env:
+     SEMANTICORE_TOKEN: ${{ secrets.SEMANTICORE_TOKEN }}
+   ```
+
+
 ### Sign Key Configuration
 
 To enable GPG signing of commits, you have two options:
@@ -108,7 +133,7 @@ jobs:
       - name: Semanticore
         run: go run github.com/aoepeople/semanticore@v0
         env:
-          SEMANTICORE_TOKEN: ${{secrets.GITHUB_TOKEN}}
+          SEMANTICORE_TOKEN: ${{secrets.SEMANTICORE_TOKEN}}
           GOTOOLCHAIN: auto
 ```
 
