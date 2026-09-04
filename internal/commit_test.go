@@ -1,6 +1,10 @@
 package internal
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
 
 func TestParseCommit(t *testing.T) {
 	var cases = []struct {
@@ -94,4 +98,21 @@ func TestDetectReleaseCommit(t *testing.T) {
 			t.Errorf("detectReleaseCommit %q failed with %q != %q, %d != %d, %d != %d, %d != %d", c.commit, c.vPrefix, vPrefix, c.major, major, c.minor, minor, c.patch, patch)
 		}
 	}
+}
+
+func TestExtractPrefixedLabels(t *testing.T) {
+	labels := ExtractPrefixedLabels("feat: x\n\nchange::major and change::major\nCHANGE::EMERGENCY", "change::")
+	assert.Equal(t, []string{"change::major", "change::emergency"}, labels)
+
+	assert.Empty(t, ExtractPrefixedLabels("feat: x", ""))
+}
+
+func TestExtractIssueRefs(t *testing.T) {
+	refs := ExtractIssueRefs("fix: something\n\nCloses #42, related to #123\nalso see #42")
+	assert.Equal(t, []int{42, 123}, refs)
+
+	refs = ExtractIssueRefs("#1 fix: something")
+	assert.Equal(t, []int{1}, refs)
+
+	assert.Empty(t, ExtractIssueRefs("fix: no issue ref here"))
 }
