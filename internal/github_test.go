@@ -21,7 +21,7 @@ func TestGithub(t *testing.T) {
 	assert.NoError(t, github.request(http.MethodGet, "notfound", http.StatusNotFound, nil, nil))
 
 	testmux.HandleFunc("/repos/my/testrepo/testbody", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"foo": "bar"}`)
+		_, _ = fmt.Fprint(w, `{"foo": "bar"}`)
 	})
 	var body struct {
 		Foo string `json:"foo"`
@@ -30,7 +30,7 @@ func TestGithub(t *testing.T) {
 	assert.Equal(t, "bar", body.Foo)
 
 	testmux.HandleFunc("/repos/my/testrepo/brokenbody", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `-invalidjson-`)
+		_, _ = fmt.Fprint(w, `-invalidjson-`)
 	})
 	assert.Error(t, github.request(http.MethodGet, "/brokenbody", http.StatusOK, nil, &body))
 
@@ -41,10 +41,10 @@ func TestGithub(t *testing.T) {
 			return
 		}
 		if noMrs {
-			fmt.Fprint(w, `[]`)
+			_, _ = fmt.Fprint(w, `[]`)
 			return
 		}
-		fmt.Fprint(w, `[{
+		_, _ = fmt.Fprint(w, `[{
 			"id": 123,
 			"number": 3,
 			"state": "open",
@@ -76,7 +76,7 @@ func TestGithub(t *testing.T) {
 	assert.NoError(t, github.Release("main", "v1.2.3", "changelog"))
 
 	testmux.HandleFunc("/repos/my/testrepo", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"default_branch": "main"}`)
+		_, _ = fmt.Fprint(w, `{"default_branch": "main"}`)
 	})
 	branch, err := github.MainBranch()
 	assert.NoError(t, err)

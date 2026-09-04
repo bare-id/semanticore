@@ -75,7 +75,7 @@ func main() {
 	try(err)
 
 	if backend != nil && *createRelease {
-		repository.Release(backend)
+		try(repository.Release(backend))
 	}
 
 	changelog := repository.Changelog()

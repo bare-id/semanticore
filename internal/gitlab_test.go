@@ -21,7 +21,7 @@ func TestGitlab(t *testing.T) {
 	assert.NoError(t, gitlab.request(http.MethodGet, "notfound", http.StatusNotFound, nil, nil))
 
 	testmux.HandleFunc("/api/v4/testbody", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"foo": "bar"}`)
+		_, _ = fmt.Fprint(w, `{"foo": "bar"}`)
 	})
 	var body struct {
 		Foo string `json:"foo"`
@@ -30,7 +30,7 @@ func TestGitlab(t *testing.T) {
 	assert.Equal(t, "bar", body.Foo)
 
 	testmux.HandleFunc("/api/v4/brokenbody", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `-invalidjson-`)
+		_, _ = fmt.Fprint(w, `-invalidjson-`)
 	})
 	assert.Error(t, gitlab.request(http.MethodGet, "brokenbody", http.StatusOK, nil, &body))
 
@@ -41,10 +41,10 @@ func TestGitlab(t *testing.T) {
 			return
 		}
 		if noMrs {
-			fmt.Fprint(w, `[]`)
+			_, _ = fmt.Fprint(w, `[]`)
 			return
 		}
-		fmt.Fprint(w, `[{
+		_, _ = fmt.Fprint(w, `[{
 			"id": 123,
 			"iid": 3,
 			"source_branch": "semanticore/release",
@@ -77,7 +77,7 @@ func TestGitlab(t *testing.T) {
 	assert.NoError(t, gitlab.Release("v1.2.3", "abc123", "changelog"))
 
 	testmux.HandleFunc("/api/v4/projects/my%2ftest%2frepo", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"default_branch": "main"}`)
+		_, _ = fmt.Fprint(w, `{"default_branch": "main"}`)
 	})
 	branch, err := gitlab.MainBranch()
 	assert.NoError(t, err)

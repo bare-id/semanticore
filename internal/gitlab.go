@@ -41,7 +41,7 @@ func (gitlab Gitlab) request(method, endpoint string, expectedStatus int, body i
 	if err != nil {
 		return fmt.Errorf("unable to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != expectedStatus {
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("expected status is %d: %v %s", expectedStatus, resp, string(b))

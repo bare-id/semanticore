@@ -29,14 +29,14 @@ func NpmUpdateVersionHook(wt *git.Worktree, repository *internal.Repository) {
 		log.Printf("npm-update-version: error opening file %s: %s", packagejson, err)
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	contents, err := io.ReadAll(f)
 	if err != nil {
 		log.Printf("npm-update-version: error reading file: %s", err)
 		return
 	}
-	f.Close()
+	_ = f.Close()
 
 	var jsonData struct {
 		Version string `json:"version"`
@@ -53,11 +53,13 @@ func NpmUpdateVersionHook(wt *git.Worktree, repository *internal.Repository) {
 		log.Printf("npm-update-version: error opening file %s for writing: %s", packagejson, err)
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = f.Write(contents)
 	if err != nil {
 		log.Printf("npm-update-version: error writing file: %s", err)
 		return
 	}
-	wt.Add(packagejson)
+	if _, err := wt.Add(packagejson); err != nil {
+		log.Printf("npm-update-version: error staging file: %s", err)
+	}
 }

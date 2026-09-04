@@ -1,14 +1,9 @@
 version: "2"
 
-# Consolidates the individual tools previously run in CI:
-#   go vet, staticcheck, misspell, ineffassign (linters)
-#   gofmt, goimports (formatters)
+# Uses golangci-lint's default linters (errcheck, govet, ineffassign,
+# staticcheck, unused) plus misspell, and gofmt/goimports as formatters.
 linters:
-  default: none
   enable:
-    - govet
-    - staticcheck
-    - ineffassign
     - misspell
 
 formatters:

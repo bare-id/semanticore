@@ -42,11 +42,11 @@ func TestReadRepository(t *testing.T) {
 	err = mockRepo.SetConfig(cfg)
 	assert.NoError(t, err)
 
-	mockRepo.CreateBranch(&config.Branch{Name: "main"})
+	assert.NoError(t, mockRepo.CreateBranch(&config.Branch{Name: "main"}))
 	mockWt, err := mockRepo.Worktree()
 	assert.NoError(t, err)
 
-	mockWt.Checkout(&git.CheckoutOptions{Branch: "main"})
+	_ = mockWt.Checkout(&git.CheckoutOptions{Branch: "main"})
 
 	_, err = ReadRepository(mockRepo, true)
 	assert.Error(t, err)
@@ -55,8 +55,10 @@ func TestReadRepository(t *testing.T) {
 	assert.NoError(t, err)
 
 	testCommit := func(msg string) plumbing.Hash {
-		file.Write([]byte("msg"))
-		mockWt.Add("test.file")
+		_, err := file.Write([]byte("msg"))
+		assert.NoError(t, err)
+		_, err = mockWt.Add("test.file")
+		assert.NoError(t, err)
 		hash, err := mockWt.Commit(msg, &git.CommitOptions{})
 		assert.NoError(t, err)
 		return hash
@@ -71,14 +73,16 @@ func TestReadRepository(t *testing.T) {
 	assert.Len(t, repository.tests, 1)
 
 	vhash := testCommit("ci(semanticore): initial ci")
-	mockRepo.CreateTag("v0.0.1", vhash, nil)
+	_, err = mockRepo.CreateTag("v0.0.1", vhash, nil)
+	assert.NoError(t, err)
 	repository, err = ReadRepository(mockRepo, true)
 	assert.NoError(t, err)
 	assert.Equal(t, "v0.0.1", repository.Latest)
 	assert.Equal(t, "", repository.unreleased)
 
 	vhash = testCommit("ci(semanticore): initial ci")
-	mockRepo.CreateTag("v0.0.2", vhash, &git.CreateTagOptions{Message: "v0.0.2"})
+	_, err = mockRepo.CreateTag("v0.0.2", vhash, &git.CreateTagOptions{Message: "v0.0.2"})
+	assert.NoError(t, err)
 	repository, err = ReadRepository(mockRepo, true)
 	assert.NoError(t, err)
 	assert.Equal(t, "v0.0.2", repository.Latest)
@@ -86,9 +90,11 @@ func TestReadRepository(t *testing.T) {
 
 	cf, err := mockWt.Filesystem.Create("Changelog.md")
 	assert.NoError(t, err)
-	defer cf.Close()
-	cf.Write([]byte(`## Version 1.2.3 test ## Version 1.2.3 ## Version 1.2.3`))
-	mockWt.Add("Changelog.md")
+	defer func() { _ = cf.Close() }()
+	_, err = cf.Write([]byte(`## Version 1.2.3 test ## Version 1.2.3 ## Version 1.2.3`))
+	assert.NoError(t, err)
+	_, err = mockWt.Add("Changelog.md")
+	assert.NoError(t, err)
 	vhash = testCommit("Release v0.0.3")
 	repository, err = ReadRepository(mockRepo, true)
 	assert.NoError(t, err)
