@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -135,4 +137,45 @@ func TestParseCSVList(t *testing.T) {
 	assert.Equal(t, []string{"hotfix/*", "urgent/*"}, parseCSVList(" hotfix/* , urgent/* "))
 	assert.Empty(t, parseCSVList(""))
 	assert.Empty(t, parseCSVList(" , , "))
+}
+
+func TestDetectCurrentTag(t *testing.T) {
+	t.Setenv("CI_COMMIT_TAG", "")
+	t.Setenv("GITHUB_REF_TYPE", "")
+	t.Setenv("GITHUB_REF_NAME", "")
+	assert.Equal(t, "", detectCurrentTag())
+
+	t.Setenv("GITHUB_REF_TYPE", "branch")
+	t.Setenv("GITHUB_REF_NAME", "main")
+	assert.Equal(t, "", detectCurrentTag())
+
+	t.Setenv("GITHUB_REF_TYPE", "tag")
+	t.Setenv("GITHUB_REF_NAME", "v1.2.3")
+	assert.Equal(t, "v1.2.3", detectCurrentTag())
+
+	t.Setenv("CI_COMMIT_TAG", "v1.2.4")
+	assert.Equal(t, "v1.2.4", detectCurrentTag())
+}
+
+func TestReadChangelogSectionForTag(t *testing.T) {
+	dir := t.TempDir()
+	cwd, err := os.Getwd()
+	assert.NoError(t, err)
+	defer func() { assert.NoError(t, os.Chdir(cwd)) }()
+	assert.NoError(t, os.Chdir(dir))
+
+	content := "# Changelog\n\n## Version v1.2.0 (2026-01-02)\n\nfeatures\n"
+	assert.NoError(t, os.WriteFile(filepath.Join(dir, "Changelog.md"), []byte(content), 0644))
+
+	section, err := readChangelogSectionForTag("Changelog.md", "v1.2.0")
+	assert.NoError(t, err)
+	assert.Equal(t, "## Version v1.2.0 (2026-01-02)\n\nfeatures", section)
+
+	// case-insensitive filename lookup, like the release commit logic
+	section, err = readChangelogSectionForTag("changelog.md", "v1.2.0")
+	assert.NoError(t, err)
+	assert.Equal(t, "## Version v1.2.0 (2026-01-02)\n\nfeatures", section)
+
+	_, err = readChangelogSectionForTag("missing.md", "v1.2.0")
+	assert.Error(t, err)
 }

@@ -248,18 +248,29 @@ func (github Github) IssuePrefixedLabels(id int, prefix string) ([]string, error
 	return out, nil
 }
 
+type githubRefBody struct {
+	Ref string `json:"ref"`
+	SHA string `json:"sha"`
+}
+
+func (github Github) CreateTag(tag, ref string) error {
+	data := githubRefBody{
+		Ref: "refs/tags/" + tag,
+		SHA: ref,
+	}
+	return github.request(http.MethodPost, "/git/refs", http.StatusCreated, data, nil)
+}
+
 type githubReleaseBody struct {
 	TagName              string `json:"tag_name"`
-	TargetCommitish      string `json:"target_commitish"`
 	Name                 string `json:"name"`
 	GenerateReleaseNotes bool   `json:"generate_release_notes"`
 	Body                 string `json:"body"`
 }
 
-func (github Github) Release(tag, ref, changelog string) error {
+func (github Github) CreateRelease(tag, changelog string) error {
 	data := githubReleaseBody{
 		TagName:              tag,
-		TargetCommitish:      ref,
 		Name:                 tag,
 		GenerateReleaseNotes: true,
 		Body:                 changelog,
