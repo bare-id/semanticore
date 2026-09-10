@@ -47,7 +47,11 @@ func (gitlab Gitlab) request(method, endpoint string, expectedStatus int, body i
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != expectedStatus {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("expected status is %d: %v %s", expectedStatus, resp, string(b))
+		err := fmt.Errorf("expected status is %d: %v %s", expectedStatus, resp, string(b))
+		if resp.StatusCode == http.StatusNotFound {
+			return errors.Join(errNotFound, err)
+		}
+		return err
 	}
 	if target == nil {
 		return nil
@@ -120,6 +124,29 @@ func (gitlab Gitlab) MergeRequest(target, title, description, labels string) err
 		return gitlab.request(http.MethodPut, fmt.Sprintf("projects/%s/merge_requests/%d", url.PathEscape(gitlab.repo), iid), http.StatusOK, strings.NewReader(data.Encode()), nil)
 	}
 	return gitlab.request(http.MethodPost, fmt.Sprintf("projects/%s/merge_requests", url.PathEscape(gitlab.repo)), http.StatusCreated, strings.NewReader(data.Encode()), nil)
+}
+
+func (gitlab Gitlab) CreateTag(tag, ref string) error {
+	var existing struct {
+		Commit struct {
+			ID string `json:"id"`
+		} `json:"commit"`
+	}
+	err := gitlab.request(http.MethodGet, fmt.Sprintf("projects/%s/repository/tags/%s", url.PathEscape(gitlab.repo), url.PathEscape(tag)), http.StatusOK, nil, &existing)
+	if err == nil {
+		return checkExistingTag(tag, existing.Commit.ID, ref)
+	}
+	if !errors.Is(err, errNotFound) {
+		return fmt.Errorf("unable to look up tag %s: %w", tag, err)
+	}
+
+	data := make(url.Values)
+	data.Set("tag_name", tag)
+	data.Set("ref", ref)
+	if err := gitlab.request(http.MethodPost, fmt.Sprintf("projects/%s/repository/tags", url.PathEscape(gitlab.repo)), http.StatusCreated, strings.NewReader(data.Encode()), nil); err != nil {
+		return fmt.Errorf("unable to tag release %s on %s: %w", tag, ref, err)
+	}
+	return nil
 }
 
 func parseLabels(raw string) []string {
@@ -275,15 +302,17 @@ func (gitlab Gitlab) IssuePrefixedLabels(id int, prefix string) ([]string, error
 	return out, nil
 }
 
-func (gitlab Gitlab) Release(tag, ref, changelog string) error {
-	data := make(url.Values)
-	data.Set("tag_name", tag)
-	data.Set("ref", ref)
-	if err := gitlab.request(http.MethodPost, fmt.Sprintf("projects/%s/repository/tags", url.PathEscape(gitlab.repo)), http.StatusCreated, strings.NewReader(data.Encode()), nil); err != nil {
-		return fmt.Errorf("unable to tag release %s on %s: %w", tag, ref, err)
+func (gitlab Gitlab) CreateRelease(tag, changelog string) error {
+	err := gitlab.request(http.MethodGet, fmt.Sprintf("projects/%s/releases/%s", url.PathEscape(gitlab.repo), url.PathEscape(tag)), http.StatusOK, nil, nil)
+	if err == nil {
+		log.Printf("[semanticore] release %s already exists, nothing to do", tag)
+		return nil
+	}
+	if !errors.Is(err, errNotFound) {
+		return fmt.Errorf("unable to look up release %s: %w", tag, err)
 	}
 
-	data = make(url.Values)
+	data := make(url.Values)
 	data.Set("tag_name", tag)
 	data.Set("description", changelog)
 	return gitlab.request(http.MethodPost, fmt.Sprintf("projects/%s/releases", url.PathEscape(gitlab.repo)), http.StatusCreated, strings.NewReader(data.Encode()), nil)

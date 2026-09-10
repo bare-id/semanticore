@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/object"
 
 	"github.com/bare-id/semanticore/internal"
@@ -30,6 +31,8 @@ var (
 	useBackend              = flag.String("backend", os.Getenv("SEMANTICORE_BACKEND"), "configure backend use either \"github\" or \"gitlab\" - we'll try to autodetect if empty")
 	createMajor             = flag.Bool("major", false, "release major versions")
 	createRelease           = flag.Bool("release", true, "create release alongside tags")
+	releaseMode             = flag.String("release-mode", emptyFallback(os.Getenv("SEMANTICORE_RELEASE_MODE"), "both"), "which release step to perform: \"tag\" creates only the git tag, \"release\" only creates the platform release for an already-existing tag, \"both\" (default) does both immediately")
+	releaseTag              = flag.String("release-tag", os.Getenv("SEMANTICORE_RELEASE_TAG"), "tag to publish a release for when -release-mode=release; auto-detected from CI_COMMIT_TAG or GITHUB_REF_NAME/GITHUB_REF_TYPE when empty")
 	createMergeRequest      = flag.Bool("merge-request", true, "create merge release for branch")
 	targetBranch            = flag.String("target-branch", os.Getenv("SEMANTICORE_TARGET_BRANCH"), "branch the release merge request targets, e.g. a hotfix/* branch; defaults to the repository's main branch, falls back to env var SEMANTICORE_TARGET_BRANCH")
 	authorName              = flag.String("git-author-name", emptyFallback(os.Getenv("GIT_AUTHOR_NAME"), "Semanticore Bot"), "author name for the git commits, falls back to env var GIT_AUTHOR_NAME and afterwards to \"Semanticore Bot\"")
@@ -96,6 +99,26 @@ func main() {
 		backend = internal.NewGitlabBackend(os.Getenv("SEMANTICORE_TOKEN"), remoteUrl.Host, repoId, releaseBranch)
 	}
 
+	mode := strings.ToLower(*releaseMode)
+	if mode != "tag" && mode != "release" && mode != "both" {
+		log.Fatalf("[semanticore] -release-mode must be \"tag\", \"release\" or \"both\", got %q", *releaseMode)
+	}
+
+	if mode == "release" {
+		if backend == nil {
+			log.Fatalf("[semanticore] release-mode=release requires SEMANTICORE_TOKEN")
+		}
+		tag := *releaseTag
+		if tag == "" {
+			tag = detectCurrentTag()
+		}
+		if tag == "" {
+			log.Fatalf("[semanticore] release-mode=release requires a tag (-release-tag, SEMANTICORE_RELEASE_TAG, or a CI tag pipeline)")
+		}
+		publishRelease(backend, tag)
+		return
+	}
+
 	head, err := repo.Head()
 	try(err)
 
@@ -111,8 +134,19 @@ func main() {
 	try(err)
 
 	if backend != nil && *createRelease {
-		if err := repository.Release(backend); err != nil {
-			log.Printf("[semanticore] unable to create release: %v", err)
+		if tagPointsTo(repo, repository.Latest, head.Hash()) {
+			if mode == "both" {
+				publishRelease(backend, repository.Latest)
+			}
+		} else {
+			if err := repository.CreateTag(backend); err != nil {
+				log.Fatalf("[semanticore] unable to create tag: %v", err)
+			}
+			if mode == "both" {
+				if err := repository.CreateRelease(backend); err != nil {
+					log.Printf("[semanticore] unable to create release: %v", err)
+				}
+			}
 		}
 	}
 
@@ -142,16 +176,8 @@ func main() {
 	wt, err := repo.Worktree()
 	try(err)
 
-	filename := *changelogFileName
-	files, err := wt.Filesystem.ReadDir(".")
+	filename, err := changelogFile(*changelogFileName)
 	try(err)
-
-	// detect case-sensitive filenames
-	for _, f := range files {
-		if !f.IsDir() && strings.EqualFold(f.Name(), filename) {
-			filename = f.Name()
-		}
-	}
 
 	cl, _ := os.ReadFile(filepath.Join(filename))
 
@@ -321,6 +347,65 @@ func releaseBranchFor(target string) string {
 	}
 	// flattened, as git can't hold semanticore/release and semanticore/release/<x> side by side
 	return "semanticore/release-" + strings.ReplaceAll(target, "/", "-")
+}
+
+func publishRelease(backend internal.Backend, tag string) {
+	section, err := readChangelogSectionForTag(*changelogFileName, tag)
+	if err != nil {
+		log.Fatalf("[semanticore] unable to read changelog for %s: %v", tag, err)
+	}
+	if err := backend.CreateRelease(tag, section); err != nil {
+		log.Fatalf("[semanticore] unable to create release: %v", err)
+	}
+}
+
+func tagPointsTo(repo *git.Repository, tag string, hash plumbing.Hash) bool {
+	ref, err := repo.Tag(tag)
+	if err != nil {
+		return false
+	}
+	if annotated, err := repo.TagObject(ref.Hash()); err == nil {
+		return annotated.Target == hash
+	}
+	return ref.Hash() == hash
+}
+
+func detectCurrentTag() string {
+	if tag := os.Getenv("CI_COMMIT_TAG"); tag != "" {
+		return tag
+	}
+	if os.Getenv("GITHUB_REF_TYPE") == "tag" {
+		return os.Getenv("GITHUB_REF_NAME")
+	}
+	return ""
+}
+
+// changelogFile returns the actual name of filename in the working directory, matched case-insensitively.
+func changelogFile(filename string) (string, error) {
+	files, err := os.ReadDir(".")
+	if err != nil {
+		return "", err
+	}
+	for _, f := range files {
+		if !f.IsDir() && strings.EqualFold(f.Name(), filename) {
+			filename = f.Name()
+		}
+	}
+	return filename, nil
+}
+
+func readChangelogSectionForTag(filename, tag string) (string, error) {
+	filename, err := changelogFile(filename)
+	if err != nil {
+		return "", err
+	}
+
+	cl, err := os.ReadFile(filename)
+	if err != nil {
+		return "", err
+	}
+
+	return internal.ExtractChangelogSection(cl, tag)
 }
 
 func emptyFallback(s, fallback string) string {

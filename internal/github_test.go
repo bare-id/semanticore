@@ -92,10 +92,42 @@ func TestGithub(t *testing.T) {
 	noMrs = true
 	assert.NoError(t, github.MergeRequest("main", "Release v1.2.3", "release description", "tag1,tag2,change::major"))
 
-	testmux.HandleFunc("/repos/my/testrepo/releases", func(w http.ResponseWriter, r *http.Request) {
+	posts := 0
+	testmux.HandleFunc("/repos/my/testrepo/git/refs", func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		var body githubRefBody
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, "refs/tags/v1.2.3", body.Ref)
+		assert.Equal(t, "abc123", body.SHA)
 		w.WriteHeader(http.StatusCreated)
 	})
-	assert.NoError(t, github.Release("main", "v1.2.3", "changelog"))
+	assert.NoError(t, github.CreateTag("v1.2.3", "abc123"))
+
+	testmux.HandleFunc("/repos/my/testrepo/releases", func(w http.ResponseWriter, r *http.Request) {
+		posts++
+		w.WriteHeader(http.StatusCreated)
+	})
+	assert.NoError(t, github.CreateRelease("v1.2.3", "changelog"))
+	assert.Equal(t, 2, posts)
+
+	testmux.HandleFunc("/repos/my/testrepo/git/ref/tags/v1.0.0", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"object": {"sha": "abc123", "type": "commit"}}`)
+	})
+	testmux.HandleFunc("/repos/my/testrepo/git/ref/tags/v1.1.0", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"object": {"sha": "tagobject", "type": "tag"}}`)
+	})
+	testmux.HandleFunc("/repos/my/testrepo/git/tags/tagobject", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"object": {"sha": "abc123", "type": "commit"}}`)
+	})
+	testmux.HandleFunc("/repos/my/testrepo/releases/tags/v1.0.0", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{}`)
+	})
+	assert.NoError(t, github.CreateTag("v1.0.0", "abc123"))
+	assert.Error(t, github.CreateTag("v1.0.0", "def456"))
+	assert.NoError(t, github.CreateTag("v1.1.0", "abc123"))
+	assert.Error(t, github.CreateTag("v1.1.0", "def456"))
+	assert.NoError(t, github.CreateRelease("v1.0.0", "changelog"))
+	assert.Equal(t, 2, posts)
 
 	testmux.HandleFunc("/repos/my/testrepo", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, `{"default_branch": "main"}`)
