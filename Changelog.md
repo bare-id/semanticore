@@ -1,5 +1,15 @@
 # Changelog
 
+## Version v0.9.0 (2026-09-11)
+
+### Features
+
+- add support to deduct change labels from related commits (be1c7900)
+
+### Fixes
+
+- **ci:** avoid breaking coverage reports on PRs from forks (5eae83e2)
+
 ## Version v0.8.1 (2026-09-04)
 
 ### Fixes
@@ -91,19 +101,3 @@
 ### Fixes
 
 - let fallback helper return the actual value (d3528fcb)
-
-## Version v0.5.0 (2022-11-21)
-
-### Features
-
-- Allow to configure committer mail and name (ea4ab630)
-
-### Fixes
-
-- **deps:** update module github.com/stretchr/testify to v1.8.1 (aa5d09a1)
-- **deps:** update module github.com/stretchr/testify to v1.8.0 (9f545314)
-
-### Chores and tidying
-
-- **deps:** update module go to 1.19 (c9530fde)
-- **deps:** update irongut/codecoveragesummary action to v1.3.0 (481e6255)
