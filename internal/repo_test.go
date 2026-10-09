@@ -22,9 +22,13 @@ type testBackend struct {
 
 func (*testBackend) String() string { return "testBackend" }
 func (*testBackend) Name() string   { return "testBackend" }
-func (b *testBackend) Release(tag, ref, changelog string) error {
+func (b *testBackend) CreateTag(tag, ref string) error {
 	b.tag = tag
 	b.ref = ref
+	return nil
+}
+func (b *testBackend) CreateRelease(tag, changelog string) error {
+	b.tag = tag
 	b.changelog = changelog
 	return nil
 }
@@ -110,7 +114,9 @@ func TestReadRepository(t *testing.T) {
 	assert.Equal(t, vhash.String(), repository.unreleased)
 	assert.Equal(t, "## Version 1.2.3 test", repository.unreleasedChangelog)
 	testBackend := new(testBackend)
-	assert.NoError(t, repository.Release(testBackend))
+	assert.NoError(t, repository.CreateTag(testBackend))
+	assert.Equal(t, vhash.String(), testBackend.ref)
+	assert.NoError(t, repository.CreateRelease(testBackend))
 	assert.Equal(t, "## Version 1.2.3 test", testBackend.changelog)
 
 	testCommit("ci(semanticore): next ci")
@@ -200,7 +206,8 @@ type issueBackend struct {
 func (*issueBackend) String() string                                        { return "issueBackend" }
 func (*issueBackend) Name() string                                          { return "issueBackend" }
 func (*issueBackend) SetAuth(_ *http.Request)                               {}
-func (*issueBackend) Release(_, _, _ string) error                          { return nil }
+func (*issueBackend) CreateTag(_, _ string) error                           { return nil }
+func (*issueBackend) CreateRelease(_, _ string) error                       { return nil }
 func (*issueBackend) MergeRequest(_, _, _, _ string) error                  { return nil }
 func (*issueBackend) CloseMergeRequest() error                              { return nil }
 func (*issueBackend) MainBranch() (string, error)                           { return "main", nil }
@@ -311,7 +318,8 @@ type emergencyBackend struct {
 func (*emergencyBackend) String() string                                        { return "emergencyBackend" }
 func (*emergencyBackend) Name() string                                          { return "emergencyBackend" }
 func (*emergencyBackend) SetAuth(_ *http.Request)                               {}
-func (*emergencyBackend) Release(_, _, _ string) error                          { return nil }
+func (*emergencyBackend) CreateTag(_, _ string) error                           { return nil }
+func (*emergencyBackend) CreateRelease(_, _ string) error                       { return nil }
 func (*emergencyBackend) MergeRequest(_, _, _, _ string) error                  { return nil }
 func (*emergencyBackend) CloseMergeRequest() error                              { return nil }
 func (*emergencyBackend) MainBranch() (string, error)                           { return "main", nil }

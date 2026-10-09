@@ -184,6 +184,109 @@ disabled by default (empty value). Regardless of this setting, Semanticore logs 
 check whether the related epic should be labeled `change::major` - Semanticore itself never sets
 `change::major`.
 
+### Splitting tag and release creation
+
+By default (`-release-mode=both`), once a release commit is detected, Semanticore
+creates the git tag and the platform Release (GitHub Release / GitLab Release) in the
+same run. If you want a pipeline triggered by the tag push to run first — tests,
+builds, signing — and only publish the Release once that pipeline is green, split the
+two steps across two pipeline stages using `-release-mode`:
+
+* `-release-mode=tag` / `SEMANTICORE_RELEASE_MODE=tag` — creates only the git tag, then
+  continues as usual (updates `Changelog.md`, opens/refreshes the next release MR/PR).
+* `-release-mode=release` / `SEMANTICORE_RELEASE_MODE=release` — creates only the
+  platform Release for an already-existing tag, then exits. The tag is taken from
+  `-release-tag` / `SEMANTICORE_RELEASE_TAG` if set, otherwise auto-detected from
+  `CI_COMMIT_TAG` (GitLab) or `GITHUB_REF_NAME`/`GITHUB_REF_TYPE` (GitHub Actions). The
+  release description is read back out of the already-committed changelog file.
+
+#### GitLab CI example
+
+```yaml
+stages:
+  - semanticore
+  - test-tag
+  - publish-release
+
+semanticore:
+  image: golang:1
+  stage: semanticore
+  variables:
+    GOTOOLCHAIN: auto
+  script:
+    - go run github.com/bare-id/semanticore@v0 -release-mode=tag
+  only:
+    - main
+
+test-on-tag:
+  stage: test-tag
+  script:
+    - ./run-tests.sh
+  rules:
+    - if: '$CI_COMMIT_TAG'
+
+publish-release:
+  image: golang:1
+  stage: publish-release
+  needs: ["test-on-tag"]
+  variables:
+    GOTOOLCHAIN: auto
+  script:
+    - go run github.com/bare-id/semanticore@v0 -release-mode=release
+  rules:
+    - if: '$CI_COMMIT_TAG'
+```
+
+#### GitHub Actions example
+
+Add `-release-mode=tag` to the existing `semanticore.yml` job, then add a second
+workflow that reacts to the tag push:
+
+```yaml
+# .github/workflows/semanticore.yml
+      - name: Semanticore
+        run: go run . -release-mode=tag
+        env:
+          SEMANTICORE_TOKEN: ${{secrets.SEMANTICORE_TOKEN}}
+```
+
+```yaml
+# .github/workflows/release.yml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: ./run-tests.sh
+
+  publish-release:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v3
+        with:
+          go-version: '1.*'
+      - run: go run github.com/bare-id/semanticore@v0 -release-mode=release
+        env:
+          SEMANTICORE_TOKEN: ${{secrets.SEMANTICORE_TOKEN}}
+          GOTOOLCHAIN: auto
+```
+
+Note: this only works if the tag is pushed with a token whose events can trigger other
+workflows. The default `GITHUB_TOKEN` cannot — see
+[Creating a GitHub token (fine-grained PAT)](#creating-a-github-token-fine-grained-pat)
+above; use a PAT as `SEMANTICORE_TOKEN` for the tag push to start `release.yml`.
+
 ## Using Semanticore
 
 To test Semanticore locally you can run it without an API token to create an example Changelog:

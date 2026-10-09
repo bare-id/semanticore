@@ -485,12 +485,23 @@ func (repository *Repository) hasSemanticType(semanticType string) bool {
 	}
 }
 
-func (repository *Repository) Release(backend Backend) error {
+func (repository *Repository) CreateTag(backend Backend) error {
+	if repository.unreleased == "" {
+		log.Printf("[semanticore] no unreleased release commit found, skipping tag creation")
+		return nil
+	}
+	if err := backend.CreateTag(repository.Latest, repository.unreleased); err != nil {
+		return fmt.Errorf("unable to tag %s at %s: %w", repository.Latest, repository.unreleased, err)
+	}
+	return nil
+}
+
+func (repository *Repository) CreateRelease(backend Backend) error {
 	if repository.unreleased == "" {
 		log.Printf("[semanticore] no unreleased release commit found, skipping release creation")
 		return nil
 	}
-	if err := backend.Release(repository.Latest, repository.unreleased, repository.unreleasedChangelog); err != nil {
+	if err := backend.CreateRelease(repository.Latest, repository.unreleasedChangelog); err != nil {
 		return fmt.Errorf("unable to release %s at %s: %w", repository.Latest, repository.unreleased, err)
 	}
 	return nil

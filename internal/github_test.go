@@ -92,10 +92,19 @@ func TestGithub(t *testing.T) {
 	noMrs = true
 	assert.NoError(t, github.MergeRequest("main", "Release v1.2.3", "release description", "tag1,tag2,change::major"))
 
+	testmux.HandleFunc("/repos/my/testrepo/git/refs", func(w http.ResponseWriter, r *http.Request) {
+		var body githubRefBody
+		assert.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		assert.Equal(t, "refs/tags/v1.2.3", body.Ref)
+		assert.Equal(t, "main", body.SHA)
+		w.WriteHeader(http.StatusCreated)
+	})
+	assert.NoError(t, github.CreateTag("v1.2.3", "main"))
+
 	testmux.HandleFunc("/repos/my/testrepo/releases", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 	})
-	assert.NoError(t, github.Release("main", "v1.2.3", "changelog"))
+	assert.NoError(t, github.CreateRelease("v1.2.3", "changelog"))
 
 	testmux.HandleFunc("/repos/my/testrepo", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, `{"default_branch": "main"}`)
