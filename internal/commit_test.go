@@ -107,6 +107,40 @@ func TestExtractPrefixedLabels(t *testing.T) {
 	assert.Empty(t, ExtractPrefixedLabels("feat: x", ""))
 }
 
+func TestParseTrailers(t *testing.T) {
+	// simple trailer in the last paragraph
+	trailers := ParseTrailers("fix: something\n\nChange-Type: emergency")
+	assert.Equal(t, map[string]string{"change-type": "emergency"}, trailers)
+
+	// case-insensitive key and value are normalized/preserved as-is
+	trailers = ParseTrailers("fix: something\n\nCHANGE-TYPE: EMERGENCY")
+	assert.Equal(t, map[string]string{"change-type": "EMERGENCY"}, trailers)
+
+	// multiple trailers in the same block
+	trailers = ParseTrailers("fix: something\n\nChange-Type: emergency\nReviewed-by: someone")
+	assert.Equal(t, map[string]string{"change-type": "emergency", "reviewed-by": "someone"}, trailers)
+
+	// trailer-looking line is NOT in the last paragraph -> no trailer block at all
+	trailers = ParseTrailers("fix: something\n\nChange-Type: emergency\n\nSome more prose after it")
+	assert.Nil(t, trailers)
+
+	// last paragraph has a mix of trailer-like and free-text lines -> not a trailer block
+	trailers = ParseTrailers("fix: something\n\nChange-Type: emergency\nthis is not a trailer")
+	assert.Nil(t, trailers)
+
+	// no body at all
+	trailers = ParseTrailers("fix: something")
+	assert.Nil(t, trailers)
+}
+
+func TestHasTrailer(t *testing.T) {
+	assert.True(t, HasTrailer("fix: something\n\nChange-Type: emergency", "Change-Type", "emergency"))
+	assert.True(t, HasTrailer("fix: something\n\nchange-type: EMERGENCY", "Change-Type", "emergency"))
+	assert.False(t, HasTrailer("fix: something\n\nChange-Type: normal", "Change-Type", "emergency"))
+	assert.False(t, HasTrailer("fix: something\n\nChange-Type: emergency\n\nmore prose", "Change-Type", "emergency"))
+	assert.False(t, HasTrailer("fix: something", "Change-Type", "emergency"))
+}
+
 func TestExtractIssueRefs(t *testing.T) {
 	refs := ExtractIssueRefs("fix: something\n\nCloses #42, related to #123\nalso see #42")
 	assert.Equal(t, []int{42, 123}, refs)

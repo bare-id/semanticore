@@ -157,6 +157,81 @@ func (github Github) syncPullRequestChangeLabels(iid int, labels string) error {
 	return github.request(http.MethodPut, fmt.Sprintf("/issues/%d/labels", iid), http.StatusOK, merged, nil)
 }
 
+func (github Github) CommitMergeRequest(sha string) (*MergeRequestRef, error) {
+	var prs []struct {
+		Number int    `json:"number"`
+		State  string `json:"state"`
+		Head   struct {
+			Ref string `json:"ref"`
+		} `json:"head"`
+		Labels []struct {
+			Name string `json:"name"`
+		} `json:"labels"`
+	}
+	if err := github.request(http.MethodGet, fmt.Sprintf("/commits/%s/pulls", sha), http.StatusOK, nil, &prs); err != nil {
+		return nil, fmt.Errorf("unable to get pull requests for commit %s: %w", sha, err)
+	}
+	if len(prs) == 0 {
+		return nil, nil
+	}
+
+	chosen := prs[0]
+	for _, pr := range prs {
+		if pr.State == "closed" {
+			chosen = pr
+			break
+		}
+	}
+
+	labels := make([]string, 0, len(chosen.Labels))
+	for _, label := range chosen.Labels {
+		labels = append(labels, label.Name)
+	}
+
+	return &MergeRequestRef{IID: chosen.Number, SourceBranch: chosen.Head.Ref, Labels: labels}, nil
+}
+
+func (github Github) MergeRequestCommitMessages(iid int) ([]string, error) {
+	var commits []struct {
+		Commit struct {
+			Message string `json:"message"`
+		} `json:"commit"`
+	}
+	if err := github.request(http.MethodGet, fmt.Sprintf("/pulls/%d/commits", iid), http.StatusOK, nil, &commits); err != nil {
+		return nil, fmt.Errorf("unable to get commits for pull request #%d: %w", iid, err)
+	}
+	out := make([]string, 0, len(commits))
+	for _, c := range commits {
+		out = append(out, c.Commit.Message)
+	}
+	return out, nil
+}
+
+func (github Github) CurrentChangeLabels(prefix string) ([]string, error) {
+	iid, err := github.findOpenMergeRequest()
+	if errors.Is(err, errNoMergeRequestFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var existingLabels []struct {
+		Name string `json:"name"`
+	}
+	if err := github.request(http.MethodGet, fmt.Sprintf("/issues/%d/labels", iid), http.StatusOK, nil, &existingLabels); err != nil {
+		return nil, err
+	}
+
+	var out []string
+	for _, label := range existingLabels {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(label.Name)), strings.ToLower(prefix)) {
+			out = append(out, strings.TrimSpace(label.Name))
+		}
+	}
+	return out, nil
+}
+
 func (github Github) IssuePrefixedLabels(id int, prefix string) ([]string, error) {
 	var existingLabels []struct {
 		Name string `json:"name"`

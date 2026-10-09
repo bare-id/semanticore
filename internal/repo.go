@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -42,6 +43,27 @@ type Repository struct {
 
 	changeLabels map[string]struct{}
 	issueRefs    []int
+	commits      []repoCommit
+}
+
+// repoCommit holds the minimal, non-personal data needed for emergency change
+// detection: no author/committer names or e-mail addresses are kept.
+type repoCommit struct {
+	hash    string
+	message string
+}
+
+// EmergencyConfig configures the emergency change detection performed by
+// Repository.CollectEmergencySignals.
+type EmergencyConfig struct {
+	// Label is the change label to apply once an emergency signal is found.
+	Label string
+	// TrailerKey/TrailerValue identify the git trailer that marks a commit as
+	// an emergency change, e.g. "change-type" / "emergency".
+	TrailerKey, TrailerValue string
+	// BranchPatterns are glob patterns (as understood by path.Match) matched
+	// against a merge request's source branch, e.g. "hotfix/*".
+	BranchPatterns []string
 }
 
 func ReadRepository(repo *git.Repository, createMajor bool) (*Repository, error) {
@@ -190,6 +212,8 @@ func ReadRepositoryWithPrefix(repo *git.Repository, createMajor bool, labelPrefi
 			break
 		}
 
+		repository.commits = append(repository.commits, repoCommit{hash: commit.Hash.String(), message: msg})
+
 		if len(commit.ParentHashes) > 1 {
 			continue
 		}
@@ -288,6 +312,119 @@ func (repository *Repository) CollectIssuePrefixedLabels(backend Backend, prefix
 			repository.changeLabels[strings.ToLower(strings.TrimSpace(label))] = struct{}{}
 		}
 	}
+}
+
+// AddChangeLabelCandidate registers an additional candidate label - e.g. one
+// derived from breaking-change detection, or a label already present on the
+// release request that must not be downgraded - for DetermineChangeLabel to
+// consider.
+func (repository *Repository) AddChangeLabelCandidate(label string) {
+	label = strings.ToLower(strings.TrimSpace(label))
+	if label == "" {
+		return
+	}
+	repository.changeLabels[label] = struct{}{}
+}
+
+// CollectEmergencySignals inspects every commit in the release window for the
+// emergency signals described in cfg: a "Change-Type: emergency" trailer on
+// the commit itself, a source branch matching cfg.BranchPatterns, or the
+// emergency label already set on the associated merge/pull request. Because a
+// squash merge discards the trailers of its individual commits, the merge
+// request's own commits are checked too when backend is available.
+//
+// Matching merge/pull requests are looked up once per commit (required to
+// resolve which request a commit belongs to), but their own commit list is
+// fetched and cached at most once per request per run.
+func (repository *Repository) CollectEmergencySignals(backend Backend, cfg EmergencyConfig) {
+	label := strings.ToLower(strings.TrimSpace(cfg.Label))
+	if label == "" {
+		return
+	}
+
+	alreadyFlagged := func() bool {
+		_, ok := repository.changeLabels[label]
+		return ok
+	}
+	flag := func(reason string) {
+		if !alreadyFlagged() {
+			log.Printf("[semanticore] emergency change detected: %s", reason)
+		}
+		repository.changeLabels[label] = struct{}{}
+	}
+
+	squashCommits := map[int][]string{}
+	checkedBranchAndLabel := map[int]struct{}{}
+
+	for _, commit := range repository.commits {
+		if HasTrailer(commit.message, cfg.TrailerKey, cfg.TrailerValue) {
+			flag(fmt.Sprintf("trailer found on commit %s", shortHash(commit.hash)))
+		}
+
+		if backend == nil {
+			continue
+		}
+
+		mr, err := backend.CommitMergeRequest(commit.hash)
+		if err != nil {
+			log.Printf("[semanticore] warning: unable to resolve merge request for commit %s: %v", shortHash(commit.hash), err)
+			continue
+		}
+		if mr == nil {
+			continue
+		}
+
+		if _, done := checkedBranchAndLabel[mr.IID]; !done {
+			checkedBranchAndLabel[mr.IID] = struct{}{}
+			if matchesAnyGlob(mr.SourceBranch, cfg.BranchPatterns) {
+				flag(fmt.Sprintf("source branch %q of !%d matches a configured emergency pattern", mr.SourceBranch, mr.IID))
+			}
+			for _, l := range mr.Labels {
+				if strings.EqualFold(strings.TrimSpace(l), label) {
+					flag(fmt.Sprintf("label already set on !%d", mr.IID))
+					break
+				}
+			}
+		}
+
+		if alreadyFlagged() {
+			continue
+		}
+
+		messages, cached := squashCommits[mr.IID]
+		if !cached {
+			messages, err = backend.MergeRequestCommitMessages(mr.IID)
+			if err != nil {
+				log.Printf("[semanticore] warning: unable to read commits of merge request !%d: %v", mr.IID, err)
+				messages = nil
+			}
+			squashCommits[mr.IID] = messages
+		}
+		for _, msg := range messages {
+			if HasTrailer(msg, cfg.TrailerKey, cfg.TrailerValue) {
+				flag(fmt.Sprintf("trailer found on a squashed commit of !%d", mr.IID))
+				break
+			}
+		}
+	}
+}
+
+func shortHash(hash string) string {
+	if len(hash) > 8 {
+		return hash[:8]
+	}
+	return hash
+}
+
+// matchesAnyGlob reports whether branch matches any of the given glob
+// patterns (as understood by path.Match, e.g. "hotfix/*").
+func matchesAnyGlob(branch string, patterns []string) bool {
+	for _, pattern := range patterns {
+		if ok, err := path.Match(pattern, branch); ok && err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // DetermineChangeLabel returns the highest-priority label from the configured priority list

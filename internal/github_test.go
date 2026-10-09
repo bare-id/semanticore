@@ -104,3 +104,54 @@ func TestGithub(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "main", branch)
 }
+
+func TestGithubCommitMergeRequestAndRelatedCommits(t *testing.T) {
+	testmux := http.NewServeMux()
+	testserver := httptest.NewServer(testmux)
+	defer testserver.Close()
+
+	github := NewGithubBackend("test-token", "my/testrepo")
+	github.server = testserver.URL
+
+	testmux.HandleFunc("/repos/my/testrepo/commits/sha-no-pr/pulls", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `[]`)
+	})
+	mr, err := github.CommitMergeRequest("sha-no-pr")
+	assert.NoError(t, err)
+	assert.Nil(t, mr)
+
+	testmux.HandleFunc("/repos/my/testrepo/commits/sha-with-pr/pulls", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `[{
+			"number": 42,
+			"state": "closed",
+			"head": {"ref": "hotfix/payment"},
+			"labels": [{"name": "change::emergency"}, {"name": "keep-me"}]
+		}]`)
+	})
+	mr, err = github.CommitMergeRequest("sha-with-pr")
+	assert.NoError(t, err)
+	assert.Equal(t, &MergeRequestRef{IID: 42, SourceBranch: "hotfix/payment", Labels: []string{"change::emergency", "keep-me"}}, mr)
+
+	testmux.HandleFunc("/repos/my/testrepo/pulls/42/commits", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `[{"commit": {"message": "fix: part one"}}, {"commit": {"message": "fix: part two\n\nChange-Type: emergency"}}]`)
+	})
+	messages, err := github.MergeRequestCommitMessages(42)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"fix: part one", "fix: part two\n\nChange-Type: emergency"}, messages)
+}
+
+func TestGithubCurrentChangeLabels(t *testing.T) {
+	testmux := http.NewServeMux()
+	testserver := httptest.NewServer(testmux)
+	defer testserver.Close()
+
+	github := NewGithubBackend("test-token", "my/testrepo")
+	github.server = testserver.URL
+
+	testmux.HandleFunc("/repos/my/testrepo/pulls", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `[]`)
+	})
+	labels, err := github.CurrentChangeLabels("change::")
+	assert.NoError(t, err)
+	assert.Nil(t, labels)
+}

@@ -27,21 +27,27 @@ func try(err error) {
 }
 
 var (
-	useBackend          = flag.String("backend", os.Getenv("SEMANTICORE_BACKEND"), "configure backend use either \"github\" or \"gitlab\" - we'll try to autodetect if empty")
-	createMajor         = flag.Bool("major", false, "release major versions")
-	createRelease       = flag.Bool("release", true, "create release alongside tags")
-	createMergeRequest  = flag.Bool("merge-request", true, "create merge release for branch")
-	authorName          = flag.String("git-author-name", emptyFallback(os.Getenv("GIT_AUTHOR_NAME"), "Semanticore Bot"), "author name for the git commits, falls back to env var GIT_AUTHOR_NAME and afterwards to \"Semanticore Bot\"")
-	authorEmail         = flag.String("git-author-email", emptyFallback(os.Getenv("GIT_AUTHOR_EMAIL"), "semanticore@aoe.com"), "author email for the git commits, falls back to env var GIT_AUTHOR_EMAIL and afterwards to \"semanticore@aoe.com\"")
-	committerName       = flag.String("git-committer-name", emptyFallback(os.Getenv("GIT_COMMITTER_NAME"), "Semanticore Bot"), "committer name for the git commits, falls back to env var GIT_COMMITTER_NAME and afterwards to \"Semanticore Bot\"")
-	committerEmail      = flag.String("git-committer-email", emptyFallback(os.Getenv("GIT_COMMITTER_EMAIL"), "semanticore@aoe.com"), "committer email for the git commits, falls back to env var GIT_COMMITTER_EMAIL and afterwards to \"semanticore@aoe.com\"")
-	changelogMaxLines   = flag.Int("changelog-max-lines", 0, "trim the changelog to the last version including the maximum configured lines")
-	changelogFileName   = flag.String("changelog-file-name", emptyFallback(os.Getenv("CHANGELOG_FILE_NAME"), "Changelog.md"), "filename for changelog, falls back to env var CHANGELOG_FILE_NAME and afterwards to \"Changelog.md\"")
-	signKeyFilePath     = flag.String("sign-key-file", emptyFallback(os.Getenv("SEMANTICORE_SIGN_KEY_FILE"), ""), "path to GPG private key file for signing commits")
-	changeLabelsEnabled = flag.Bool("change-labels-enabled", strings.EqualFold(os.Getenv("SEMANTICORE_CHANGE_LABELS_ENABLED"), "true"), "enable change label sync for merge requests")
-	changeLabels        = flag.String("change-labels", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABELS"), ""), "CSV list of labels in priority order (highest first), e.g. change::emergency,change::major,change::normal,change::standard")
-	changeLabelMap      = flag.String("change-label-map", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABEL_MAP"), ""), "CSV list mapping semantic commit types to labels, e.g. feat=change::normal,chore=change::standard")
-	changeLabelDefault  = flag.String("change-label-default", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABEL_DEFAULT"), ""), "label to use when no commit label matches; must be in --change-labels")
+	useBackend              = flag.String("backend", os.Getenv("SEMANTICORE_BACKEND"), "configure backend use either \"github\" or \"gitlab\" - we'll try to autodetect if empty")
+	createMajor             = flag.Bool("major", false, "release major versions")
+	createRelease           = flag.Bool("release", true, "create release alongside tags")
+	createMergeRequest      = flag.Bool("merge-request", true, "create merge release for branch")
+	authorName              = flag.String("git-author-name", emptyFallback(os.Getenv("GIT_AUTHOR_NAME"), "Semanticore Bot"), "author name for the git commits, falls back to env var GIT_AUTHOR_NAME and afterwards to \"Semanticore Bot\"")
+	authorEmail             = flag.String("git-author-email", emptyFallback(os.Getenv("GIT_AUTHOR_EMAIL"), "semanticore@aoe.com"), "author email for the git commits, falls back to env var GIT_AUTHOR_EMAIL and afterwards to \"semanticore@aoe.com\"")
+	committerName           = flag.String("git-committer-name", emptyFallback(os.Getenv("GIT_COMMITTER_NAME"), "Semanticore Bot"), "committer name for the git commits, falls back to env var GIT_COMMITTER_NAME and afterwards to \"Semanticore Bot\"")
+	committerEmail          = flag.String("git-committer-email", emptyFallback(os.Getenv("GIT_COMMITTER_EMAIL"), "semanticore@aoe.com"), "committer email for the git commits, falls back to env var GIT_COMMITTER_EMAIL and afterwards to \"semanticore@aoe.com\"")
+	changelogMaxLines       = flag.Int("changelog-max-lines", 0, "trim the changelog to the last version including the maximum configured lines")
+	changelogFileName       = flag.String("changelog-file-name", emptyFallback(os.Getenv("CHANGELOG_FILE_NAME"), "Changelog.md"), "filename for changelog, falls back to env var CHANGELOG_FILE_NAME and afterwards to \"Changelog.md\"")
+	signKeyFilePath         = flag.String("sign-key-file", emptyFallback(os.Getenv("SEMANTICORE_SIGN_KEY_FILE"), ""), "path to GPG private key file for signing commits")
+	changeLabelsEnabled     = flag.Bool("change-labels-enabled", strings.EqualFold(os.Getenv("SEMANTICORE_CHANGE_LABELS_ENABLED"), "true"), "enable change label sync for merge requests")
+	changeLabels            = flag.String("change-labels", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABELS"), ""), "CSV list of labels in priority order (highest first), e.g. change::emergency,change::major,change::normal,change::standard")
+	changeLabelMap          = flag.String("change-label-map", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABEL_MAP"), ""), "CSV list mapping semantic commit types to labels, e.g. feat=change::normal,chore=change::standard")
+	changeLabelDefault      = flag.String("change-label-default", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABEL_DEFAULT"), ""), "label to use when no commit label matches; must be in --change-labels")
+	changeLabelPolicy       = flag.String("change-label-policy", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABEL_POLICY"), "upgrade-only"), "\"upgrade-only\" (default, never downgrade a higher-ranked label) or \"overwrite\"")
+	changeLabelBreaking     = flag.String("change-label-breaking", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABEL_BREAKING"), ""), "label to add (in addition) when a breaking change is detected; must be in --change-labels, empty disables this")
+	changeEmergencyEnabled  = flag.Bool("change-emergency-enabled", strings.EqualFold(os.Getenv("SEMANTICORE_CHANGE_EMERGENCY_ENABLED"), "true"), "enable emergency change detection, requires --change-labels-enabled")
+	changeEmergencyLabel    = flag.String("change-emergency-label", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_EMERGENCY_LABEL"), "change::emergency"), "label to apply when an emergency change is detected; must be in --change-labels")
+	changeEmergencyTrailer  = flag.String("change-emergency-trailer", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_EMERGENCY_TRAILER"), "Change-Type: emergency"), "git trailer, as \"Key: Value\", that marks a commit as an emergency change")
+	changeEmergencyBranches = flag.String("change-emergency-branches", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_EMERGENCY_BRANCHES"), "hotfix/*"), "CSV list of glob patterns matched against a merge request's source branch")
 )
 
 func main() {
@@ -198,6 +204,49 @@ func main() {
 			if !defaultOk {
 				log.Printf("[semanticore] change labels are enabled but SEMANTICORE_CHANGE_LABEL_DEFAULT is not part of SEMANTICORE_CHANGE_LABELS, disabling feature")
 			} else if semanticMap, ok := parseChangeLabelMap(*changeLabelMap, priority); ok {
+				policy, policyOk := parseChangeLabelPolicy(*changeLabelPolicy)
+				if !policyOk {
+					log.Fatalf("[semanticore] SEMANTICORE_CHANGE_LABEL_POLICY must be \"upgrade-only\" or \"overwrite\", got %q", *changeLabelPolicy)
+				}
+
+				breakingLabel, breakingOk := parseChangeLabelDefault(*changeLabelBreaking, priority)
+				if !breakingOk {
+					log.Fatalf("[semanticore] SEMANTICORE_CHANGE_LABEL_BREAKING %q is not part of SEMANTICORE_CHANGE_LABELS", *changeLabelBreaking)
+				}
+
+				if *changeEmergencyEnabled {
+					emergencyLabel, emergencyOk := parseChangeLabelDefault(*changeEmergencyLabel, priority)
+					if !emergencyOk || emergencyLabel == "" {
+						log.Fatalf("[semanticore] SEMANTICORE_CHANGE_EMERGENCY_LABEL %q is not part of SEMANTICORE_CHANGE_LABELS", *changeEmergencyLabel)
+					}
+					trailerKey, trailerValue, trailerOk := parseEmergencyTrailer(*changeEmergencyTrailer)
+					if !trailerOk {
+						log.Fatalf("[semanticore] SEMANTICORE_CHANGE_EMERGENCY_TRAILER %q must be in \"Key: Value\" form", *changeEmergencyTrailer)
+					}
+
+					repository.CollectEmergencySignals(backend, internal.EmergencyConfig{
+						Label:          emergencyLabel,
+						TrailerKey:     trailerKey,
+						TrailerValue:   trailerValue,
+						BranchPatterns: parseCSVList(*changeEmergencyBranches),
+					})
+				}
+
+				if breakingLabel != "" && repository.Breaking {
+					repository.AddChangeLabelCandidate(breakingLabel)
+					log.Printf("[semanticore] breaking change detected in this release - please verify whether the related epic should be labeled change::major (semanticore never sets change::major itself)")
+				}
+
+				if policy == "upgrade-only" && backend != nil {
+					if existing, err := backend.CurrentChangeLabels(labelPrefix); err != nil {
+						log.Printf("[semanticore] warning: could not read existing release labels, downgrade protection may not apply: %v", err)
+					} else {
+						for _, label := range existing {
+							repository.AddChangeLabelCandidate(label)
+						}
+					}
+				}
+
 				repository.ChangeLabel = repository.DetermineChangeLabel(priority, semanticMap, defaultLabel)
 				labels += "," + repository.ChangeLabel
 			} else {
@@ -294,6 +343,43 @@ func parseChangeLabelDefault(defaultLabel string, priority []string) (string, bo
 		}
 	}
 	return dl, true
+}
+
+// parseChangeLabelPolicy validates SEMANTICORE_CHANGE_LABEL_POLICY. The only
+// accepted values are "upgrade-only" and "overwrite" (case-insensitive).
+func parseChangeLabelPolicy(raw string) (string, bool) {
+	policy := strings.ToLower(strings.TrimSpace(raw))
+	if policy != "upgrade-only" && policy != "overwrite" {
+		return "", false
+	}
+	return policy, true
+}
+
+// parseEmergencyTrailer splits a "Key: Value" configuration string, as used
+// for SEMANTICORE_CHANGE_EMERGENCY_TRAILER, into its key and value.
+func parseEmergencyTrailer(raw string) (key, value string, ok bool) {
+	parts := strings.SplitN(raw, ":", 2)
+	if len(parts) != 2 {
+		return "", "", false
+	}
+	key = strings.TrimSpace(parts[0])
+	value = strings.TrimSpace(parts[1])
+	if key == "" || value == "" {
+		return "", "", false
+	}
+	return key, value, true
+}
+
+// parseCSVList splits a comma-separated list into trimmed, non-empty entries.
+func parseCSVList(raw string) []string {
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func parseChangeLabelMap(raw string, priority []string) (map[string]string, bool) {
