@@ -32,6 +32,9 @@ func (*testBackend) MergeRequest(_, _, _, _ string) error                  { ret
 func (*testBackend) CloseMergeRequest() error                              { return nil }
 func (*testBackend) MainBranch() (string, error)                           { return "main", nil }
 func (*testBackend) IssuePrefixedLabels(_ int, _ string) ([]string, error) { return nil, nil }
+func (*testBackend) CommitMergeRequest(_ string) (*MergeRequestRef, error) { return nil, nil }
+func (*testBackend) MergeRequestCommitMessages(_ int) ([]string, error)    { return nil, nil }
+func (*testBackend) CurrentChangeLabels(_ string) ([]string, error)        { return nil, nil }
 func (*testBackend) SetAuth(_ *http.Request)                               {}
 
 func TestReadRepository(t *testing.T) {
@@ -194,13 +197,16 @@ type issueBackend struct {
 	labels map[int][]string
 }
 
-func (*issueBackend) String() string                       { return "issueBackend" }
-func (*issueBackend) Name() string                         { return "issueBackend" }
-func (*issueBackend) SetAuth(_ *http.Request)              {}
-func (*issueBackend) Release(_, _, _ string) error         { return nil }
-func (*issueBackend) MergeRequest(_, _, _, _ string) error { return nil }
-func (*issueBackend) CloseMergeRequest() error             { return nil }
-func (*issueBackend) MainBranch() (string, error)          { return "main", nil }
+func (*issueBackend) String() string                                        { return "issueBackend" }
+func (*issueBackend) Name() string                                          { return "issueBackend" }
+func (*issueBackend) SetAuth(_ *http.Request)                               {}
+func (*issueBackend) Release(_, _, _ string) error                          { return nil }
+func (*issueBackend) MergeRequest(_, _, _, _ string) error                  { return nil }
+func (*issueBackend) CloseMergeRequest() error                              { return nil }
+func (*issueBackend) MainBranch() (string, error)                           { return "main", nil }
+func (*issueBackend) CommitMergeRequest(_ string) (*MergeRequestRef, error) { return nil, nil }
+func (*issueBackend) MergeRequestCommitMessages(_ int) ([]string, error)    { return nil, nil }
+func (*issueBackend) CurrentChangeLabels(_ string) ([]string, error)        { return nil, nil }
 func (b *issueBackend) IssuePrefixedLabels(id int, prefix string) ([]string, error) {
 	labels, ok := b.labels[id]
 	if !ok {
@@ -266,4 +272,214 @@ func TestDetermineChangeLabel(t *testing.T) {
 	// < 2 priority → disabled
 	assert.Equal(t, "", repo.DetermineChangeLabel([]string{"change::major"}, nil, ""))
 	assert.Equal(t, "", repo.DetermineChangeLabel(nil, nil, ""))
+}
+
+func TestAddChangeLabelCandidate(t *testing.T) {
+	priority := []string{"change::emergency", "change::major", "change::normal", "change::standard"}
+
+	// feeding in a label already present on the release request protects it
+	// from being downgraded by a lower-ranked recomputed candidate (upgrade-only policy)
+	repo := &Repository{Features: []string{"x"}, changeLabels: map[string]struct{}{}}
+	repo.AddChangeLabelCandidate("change::emergency")
+	assert.Equal(t, "change::emergency", repo.DetermineChangeLabel(priority, map[string]string{"feat": "change::normal"}, "change::standard"))
+
+	// case-insensitive, trims whitespace
+	repo = &Repository{changeLabels: map[string]struct{}{}}
+	repo.AddChangeLabelCandidate("  Change::Major  ")
+	assert.Equal(t, "change::major", repo.DetermineChangeLabel(priority, nil, "change::standard"))
+
+	// empty label is a no-op
+	repo = &Repository{changeLabels: map[string]struct{}{}}
+	repo.AddChangeLabelCandidate("")
+	assert.Equal(t, "change::standard", repo.DetermineChangeLabel(priority, nil, "change::standard"))
+}
+
+func TestMatchesAnyGlob(t *testing.T) {
+	assert.True(t, matchesAnyGlob("hotfix/payment-fix", []string{"hotfix/*"}))
+	assert.True(t, matchesAnyGlob("hotfix/payment-fix", []string{"release/*", "hotfix/*"}))
+	assert.False(t, matchesAnyGlob("feature/payment", []string{"hotfix/*"}))
+	assert.False(t, matchesAnyGlob("hotfix/nested/branch", []string{"hotfix/*"}))
+	assert.False(t, matchesAnyGlob("hotfix/payment-fix", nil))
+}
+
+type emergencyBackend struct {
+	mrsBySha     map[string]*MergeRequestRef
+	commitsByIID map[int][]string
+	commitCalls  map[int]int
+}
+
+func (*emergencyBackend) String() string                                        { return "emergencyBackend" }
+func (*emergencyBackend) Name() string                                          { return "emergencyBackend" }
+func (*emergencyBackend) SetAuth(_ *http.Request)                               {}
+func (*emergencyBackend) Release(_, _, _ string) error                          { return nil }
+func (*emergencyBackend) MergeRequest(_, _, _, _ string) error                  { return nil }
+func (*emergencyBackend) CloseMergeRequest() error                              { return nil }
+func (*emergencyBackend) MainBranch() (string, error)                           { return "main", nil }
+func (*emergencyBackend) IssuePrefixedLabels(_ int, _ string) ([]string, error) { return nil, nil }
+func (*emergencyBackend) CurrentChangeLabels(_ string) ([]string, error)        { return nil, nil }
+func (b *emergencyBackend) CommitMergeRequest(sha string) (*MergeRequestRef, error) {
+	return b.mrsBySha[sha], nil
+}
+func (b *emergencyBackend) MergeRequestCommitMessages(iid int) ([]string, error) {
+	if b.commitCalls == nil {
+		b.commitCalls = map[int]int{}
+	}
+	b.commitCalls[iid]++
+	return b.commitsByIID[iid], nil
+}
+
+func emergencyCfg() EmergencyConfig {
+	return EmergencyConfig{
+		Label:          "change::emergency",
+		TrailerKey:     "Change-Type",
+		TrailerValue:   "emergency",
+		BranchPatterns: []string{"hotfix/*"},
+	}
+}
+
+func TestCollectEmergencySignalsViaTrailer(t *testing.T) {
+	repo := &Repository{
+		changeLabels: map[string]struct{}{},
+		commits: []repoCommit{
+			{hash: "aaa1", message: "fix: urgent patch\n\nChange-Type: emergency"},
+		},
+	}
+	repo.CollectEmergencySignals(nil, emergencyCfg())
+	_, flagged := repo.changeLabels["change::emergency"]
+	assert.True(t, flagged)
+}
+
+func TestCollectEmergencySignalsTrailerNotInLastParagraph(t *testing.T) {
+	repo := &Repository{
+		changeLabels: map[string]struct{}{},
+		commits: []repoCommit{
+			{hash: "aaa1", message: "fix: urgent patch\n\nChange-Type: emergency\n\nmore context"},
+		},
+	}
+	repo.CollectEmergencySignals(nil, emergencyCfg())
+	_, flagged := repo.changeLabels["change::emergency"]
+	assert.False(t, flagged)
+}
+
+func TestCollectEmergencySignalsViaBranch(t *testing.T) {
+	backend := &emergencyBackend{mrsBySha: map[string]*MergeRequestRef{
+		"aaa1": {IID: 5, SourceBranch: "hotfix/payment", Labels: nil},
+	}}
+	repo := &Repository{
+		changeLabels: map[string]struct{}{},
+		commits:      []repoCommit{{hash: "aaa1", message: "fix: patch"}},
+	}
+	repo.CollectEmergencySignals(backend, emergencyCfg())
+	_, flagged := repo.changeLabels["change::emergency"]
+	assert.True(t, flagged)
+}
+
+func TestCollectEmergencySignalsViaExistingMRLabel(t *testing.T) {
+	backend := &emergencyBackend{mrsBySha: map[string]*MergeRequestRef{
+		"aaa1": {IID: 5, SourceBranch: "fix/payment", Labels: []string{"change::emergency"}},
+	}}
+	repo := &Repository{
+		changeLabels: map[string]struct{}{},
+		commits:      []repoCommit{{hash: "aaa1", message: "fix: patch"}},
+	}
+	repo.CollectEmergencySignals(backend, emergencyCfg())
+	_, flagged := repo.changeLabels["change::emergency"]
+	assert.True(t, flagged)
+}
+
+func TestCollectEmergencySignalsViaSquashedCommit(t *testing.T) {
+	backend := &emergencyBackend{
+		mrsBySha: map[string]*MergeRequestRef{
+			"squash1": {IID: 7, SourceBranch: "fix/payment", Labels: nil},
+		},
+		commitsByIID: map[int][]string{
+			7: {"fix: part one", "fix: part two\n\nChange-Type: emergency"},
+		},
+	}
+	repo := &Repository{
+		changeLabels: map[string]struct{}{},
+		commits:      []repoCommit{{hash: "squash1", message: "fix: patch (squash commit)"}},
+	}
+	repo.CollectEmergencySignals(backend, emergencyCfg())
+	_, flagged := repo.changeLabels["change::emergency"]
+	assert.True(t, flagged)
+	assert.Equal(t, 1, backend.commitCalls[7])
+}
+
+func TestCollectEmergencySignalsNoMatch(t *testing.T) {
+	backend := &emergencyBackend{mrsBySha: map[string]*MergeRequestRef{
+		"aaa1": {IID: 5, SourceBranch: "feature/payment", Labels: []string{"keep-me"}},
+	}}
+	repo := &Repository{
+		changeLabels: map[string]struct{}{},
+		commits:      []repoCommit{{hash: "aaa1", message: "fix: patch"}},
+	}
+	repo.CollectEmergencySignals(backend, emergencyCfg())
+	_, flagged := repo.changeLabels["change::emergency"]
+	assert.False(t, flagged)
+}
+
+func TestCollectEmergencySignalsAggregatesAcrossCommits(t *testing.T) {
+	backend := &emergencyBackend{mrsBySha: map[string]*MergeRequestRef{
+		"ordinary": {IID: 1, SourceBranch: "feature/payment"},
+		"urgent":   {IID: 2, SourceBranch: "hotfix/payment"},
+	}}
+	repo := &Repository{
+		changeLabels: map[string]struct{}{},
+		commits: []repoCommit{
+			{hash: "ordinary", message: "fix: regular fix"},
+			{hash: "urgent", message: "fix: urgent fix"},
+		},
+	}
+	repo.CollectEmergencySignals(backend, emergencyCfg())
+	_, flagged := repo.changeLabels["change::emergency"]
+	assert.True(t, flagged)
+}
+
+func TestCollectEmergencySignalsCachesPerMergeRequest(t *testing.T) {
+	backend := &emergencyBackend{
+		mrsBySha: map[string]*MergeRequestRef{
+			"sha1": {IID: 9, SourceBranch: "fix/payment"},
+			"sha2": {IID: 9, SourceBranch: "fix/payment"},
+		},
+		commitsByIID: map[int][]string{
+			9: {"fix: part one", "fix: part two"},
+		},
+	}
+	repo := &Repository{
+		changeLabels: map[string]struct{}{},
+		commits: []repoCommit{
+			{hash: "sha1", message: "fix: part one"},
+			{hash: "sha2", message: "fix: part two"},
+		},
+	}
+	repo.CollectEmergencySignals(backend, emergencyCfg())
+	assert.Equal(t, 1, backend.commitCalls[9])
+}
+
+func TestCollectEmergencySignalsSkipsAPIOnceFlagged(t *testing.T) {
+	backend := &emergencyBackend{
+		mrsBySha: map[string]*MergeRequestRef{
+			"sha1": {IID: 11, SourceBranch: "hotfix/payment"},
+		},
+	}
+	repo := &Repository{
+		changeLabels: map[string]struct{}{},
+		commits: []repoCommit{
+			{hash: "sha1", message: "fix: part one"},
+		},
+	}
+	repo.CollectEmergencySignals(backend, emergencyCfg())
+	assert.Equal(t, 0, backend.commitCalls[11])
+}
+
+func TestCollectEmergencySignalsDisabledWithoutLabel(t *testing.T) {
+	repo := &Repository{
+		changeLabels: map[string]struct{}{},
+		commits:      []repoCommit{{hash: "aaa1", message: "fix: urgent\n\nChange-Type: emergency"}},
+	}
+	cfg := emergencyCfg()
+	cfg.Label = ""
+	repo.CollectEmergencySignals(nil, cfg)
+	assert.Empty(t, repo.changeLabels)
 }

@@ -126,6 +126,64 @@ Each mapped label must be part of `SEMANTICORE_CHANGE_LABELS`, otherwise the fea
 
 When active, Semanticore always synchronizes only labels starting with `change::` and keeps all other labels untouched.
 
+#### Downgrade protection
+
+By default (`SEMANTICORE_CHANGE_LABEL_POLICY=upgrade-only`), Semanticore never replaces a
+change label already present on the release MR/PR with a lower-ranked one - this protects a
+label that was set or escalated by hand, and keeps repeated runs idempotent. Set
+`SEMANTICORE_CHANGE_LABEL_POLICY=overwrite` to always recompute the label from scratch instead.
+
+#### Emergency change detection
+
+Semanticore can automatically add the highest-ranked label (`change::emergency` by default) to
+the release MR/PR when a commit in the release looks like an emergency change. This is disabled
+by default; enable it with `SEMANTICORE_CHANGE_EMERGENCY_ENABLED=true` (requires
+`SEMANTICORE_CHANGE_LABELS_ENABLED=true`).
+
+A change is considered an emergency when at least one of the following is true for a commit in
+the release:
+
+* The commit carries a [git trailer](https://git-scm.com/docs/git-interpret-trailers) matching
+  `SEMANTICORE_CHANGE_EMERGENCY_TRAILER` (default `Change-Type: emergency`), case-insensitively on
+  both key and value. The trailer must be part of the trailer block in the **last paragraph** of
+  the commit message, e.g.:
+
+  ```
+  fix(payment): patch broken refund calculation
+
+  Change-Type: emergency
+  ```
+
+* The associated merge request's source branch matches one of the glob patterns in
+  `SEMANTICORE_CHANGE_EMERGENCY_BRANCHES` (default `hotfix/*`, comma-separated for multiple
+  patterns).
+* The associated merge request already carries the configured emergency label.
+
+Because a squash merge discards the trailers of the squashed-away commits, Semanticore also
+checks the merge request's own commits via the backend API whenever the squash/merge commit
+itself does not carry the trailer. If your workflow squash-merges, consider using a squash commit
+message template that preserves the trailer, e.g. GitLab's "Squash commit message" field set to:
+
+```
+%{title}
+
+%{all_commits}
+```
+
+or, simpler, just re-adding the trailer once in the squash commit message itself.
+
+The emergency label must be part of `SEMANTICORE_CHANGE_LABELS`, otherwise Semanticore aborts
+with an error at startup.
+
+#### Breaking changes
+
+When a commit in the release uses a breaking-change marker (`feat!:`/`fix!:`/... or a
+`BREAKING CHANGE:` footer), Semanticore can add an additional label via
+`SEMANTICORE_CHANGE_LABEL_BREAKING` (must be part of `SEMANTICORE_CHANGE_LABELS`). This is
+disabled by default (empty value). Regardless of this setting, Semanticore logs a reminder to
+check whether the related epic should be labeled `change::major` - Semanticore itself never sets
+`change::major`.
+
 ## Using Semanticore
 
 To test Semanticore locally you can run it without an API token to create an example Changelog:

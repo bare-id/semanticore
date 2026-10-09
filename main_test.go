@@ -85,3 +85,54 @@ func TestParseChangeLabelMap(t *testing.T) {
 	_, ok = parseChangeLabelMap("feat-change::normal", priority)
 	assert.False(t, ok)
 }
+
+func TestParseChangeLabelPolicy(t *testing.T) {
+	policy, ok := parseChangeLabelPolicy("upgrade-only")
+	assert.True(t, ok)
+	assert.Equal(t, "upgrade-only", policy)
+
+	// case-insensitive, trims whitespace
+	policy, ok = parseChangeLabelPolicy("  Overwrite  ")
+	assert.True(t, ok)
+	assert.Equal(t, "overwrite", policy)
+
+	_, ok = parseChangeLabelPolicy("")
+	assert.False(t, ok)
+
+	_, ok = parseChangeLabelPolicy("downgrade")
+	assert.False(t, ok)
+}
+
+func TestParseEmergencyTrailer(t *testing.T) {
+	key, value, ok := parseEmergencyTrailer("Change-Type: emergency")
+	assert.True(t, ok)
+	assert.Equal(t, "Change-Type", key)
+	assert.Equal(t, "emergency", value)
+
+	// extra whitespace is trimmed
+	key, value, ok = parseEmergencyTrailer("  Change-Type :  emergency  ")
+	assert.True(t, ok)
+	assert.Equal(t, "Change-Type", key)
+	assert.Equal(t, "emergency", value)
+
+	// missing colon
+	_, _, ok = parseEmergencyTrailer("Change-Type emergency")
+	assert.False(t, ok)
+
+	// missing key or value
+	_, _, ok = parseEmergencyTrailer(": emergency")
+	assert.False(t, ok)
+	_, _, ok = parseEmergencyTrailer("Change-Type:")
+	assert.False(t, ok)
+
+	_, _, ok = parseEmergencyTrailer("")
+	assert.False(t, ok)
+}
+
+func TestParseCSVList(t *testing.T) {
+	assert.Equal(t, []string{"hotfix/*"}, parseCSVList("hotfix/*"))
+	assert.Equal(t, []string{"hotfix/*", "urgent/*"}, parseCSVList("hotfix/*,urgent/*"))
+	assert.Equal(t, []string{"hotfix/*", "urgent/*"}, parseCSVList(" hotfix/* , urgent/* "))
+	assert.Empty(t, parseCSVList(""))
+	assert.Empty(t, parseCSVList(" , , "))
+}

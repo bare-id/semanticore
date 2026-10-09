@@ -129,6 +129,53 @@ func ExtractIssueRefs(msg string) []int {
 	return refs
 }
 
+// ParseTrailers extracts Git trailers from a commit message, following the
+// git-interpret-trailers convention: only the last paragraph of the message is
+// considered, and only if every one of its non-empty lines looks like a
+// "Key: Value" pair. Keys are returned lower-cased. Returns nil if the last
+// paragraph is not a trailer block.
+func ParseTrailers(msg string) map[string]string {
+	paragraphs := strings.Split(strings.TrimRight(msg, "\n"), "\n\n")
+	if len(paragraphs) < 2 {
+		// a subject-only message has no separate trailer paragraph
+		return nil
+	}
+	last := strings.TrimSpace(paragraphs[len(paragraphs)-1])
+	if last == "" {
+		return nil
+	}
+
+	trailers := map[string]string{}
+	for _, line := range strings.Split(last, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) != 2 {
+			return nil
+		}
+		key := strings.ToLower(strings.TrimSpace(parts[0]))
+		value := strings.TrimSpace(parts[1])
+		if key == "" || value == "" {
+			return nil
+		}
+		trailers[key] = value
+	}
+	return trailers
+}
+
+// HasTrailer reports whether msg carries a trailer named key with the given
+// value in its trailer block. Both key and value are compared case-insensitively.
+func HasTrailer(msg, key, value string) bool {
+	trailers := ParseTrailers(msg)
+	if trailers == nil {
+		return false
+	}
+	got, ok := trailers[strings.ToLower(strings.TrimSpace(key))]
+	return ok && strings.EqualFold(got, value)
+}
+
 var releaseCommitRegex = regexp.MustCompile(`^Release (v?)(\d+).(\d+).(\d+)( \(.*\))?$`)
 
 func DetectReleaseCommit(commit string, merge bool) (vPrefix string, major, minor, patch int) {

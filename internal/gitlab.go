@@ -199,6 +199,63 @@ func syncChangeLabels(existing, desired []string, prefix string) []string {
 	return final
 }
 
+func (gitlab Gitlab) CommitMergeRequest(sha string) (*MergeRequestRef, error) {
+	var mrs []struct {
+		IID          int      `json:"iid"`
+		SourceBranch string   `json:"source_branch"`
+		State        string   `json:"state"`
+		Labels       []string `json:"labels"`
+	}
+	if err := gitlab.request(http.MethodGet, fmt.Sprintf("projects/%s/repository/commits/%s/merge_requests", url.PathEscape(gitlab.repo), url.PathEscape(sha)), http.StatusOK, nil, &mrs); err != nil {
+		return nil, fmt.Errorf("unable to get merge requests for commit %s: %w", sha, err)
+	}
+	if len(mrs) == 0 {
+		return nil, nil
+	}
+
+	chosen := mrs[0]
+	for _, mr := range mrs {
+		if mr.State == "merged" {
+			chosen = mr
+			break
+		}
+	}
+
+	return &MergeRequestRef{IID: chosen.IID, SourceBranch: chosen.SourceBranch, Labels: chosen.Labels}, nil
+}
+
+func (gitlab Gitlab) MergeRequestCommitMessages(iid int) ([]string, error) {
+	var commits []struct {
+		Message string `json:"message"`
+	}
+	if err := gitlab.request(http.MethodGet, fmt.Sprintf("projects/%s/merge_requests/%d/commits", url.PathEscape(gitlab.repo), iid), http.StatusOK, nil, &commits); err != nil {
+		return nil, fmt.Errorf("unable to get commits for merge request !%d: %w", iid, err)
+	}
+	out := make([]string, 0, len(commits))
+	for _, c := range commits {
+		out = append(out, c.Message)
+	}
+	return out, nil
+}
+
+func (gitlab Gitlab) CurrentChangeLabels(prefix string) ([]string, error) {
+	_, labels, err := gitlab.findOpenMergeRequest()
+	if errors.Is(err, errNoMergeRequestFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var out []string
+	for _, label := range labels {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(label)), strings.ToLower(prefix)) {
+			out = append(out, strings.TrimSpace(label))
+		}
+	}
+	return out, nil
+}
+
 func (gitlab Gitlab) IssuePrefixedLabels(id int, prefix string) ([]string, error) {
 	var issue struct {
 		Labels []string `json:"labels"`

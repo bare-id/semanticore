@@ -91,3 +91,60 @@ func TestGitlab(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "main", branch)
 }
+
+func TestGitlabCommitMergeRequestAndRelatedCommits(t *testing.T) {
+	testmux := http.NewServeMux()
+	testserver := httptest.NewServer(testmux)
+	defer testserver.Close()
+
+	gitlab := NewGitlabBackend("test-token", "server", "my/test/repo")
+	gitlab.server = testserver.URL
+
+	testmux.HandleFunc("/api/v4/projects/my%2ftest%2frepo/repository/commits/sha-no-mr/merge_requests", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `[]`)
+	})
+	mr, err := gitlab.CommitMergeRequest("sha-no-mr")
+	assert.NoError(t, err)
+	assert.Nil(t, mr)
+
+	testmux.HandleFunc("/api/v4/projects/my%2ftest%2frepo/repository/commits/sha-with-mr/merge_requests", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `[{
+			"iid": 7,
+			"source_branch": "hotfix/payment",
+			"state": "merged",
+			"labels": ["change::emergency", "keep-me"]
+		}]`)
+	})
+	mr, err = gitlab.CommitMergeRequest("sha-with-mr")
+	assert.NoError(t, err)
+	assert.Equal(t, &MergeRequestRef{IID: 7, SourceBranch: "hotfix/payment", Labels: []string{"change::emergency", "keep-me"}}, mr)
+
+	testmux.HandleFunc("/api/v4/projects/my%2ftest%2frepo/merge_requests/7/commits", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `[{"message": "fix: part one"}, {"message": "fix: part two\n\nChange-Type: emergency"}]`)
+	})
+	messages, err := gitlab.MergeRequestCommitMessages(7)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"fix: part one", "fix: part two\n\nChange-Type: emergency"}, messages)
+}
+
+func TestGitlabCurrentChangeLabels(t *testing.T) {
+	testmux := http.NewServeMux()
+	testserver := httptest.NewServer(testmux)
+	defer testserver.Close()
+
+	gitlab := NewGitlabBackend("test-token", "server", "my/test/repo")
+	gitlab.server = testserver.URL
+
+	testmux.HandleFunc("/api/v4/projects/my%2ftest%2frepo/merge_requests", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `[{
+			"id": 123,
+			"iid": 3,
+			"source_branch": "semanticore/release",
+			"state": "opened",
+			"labels": ["keep-me", "change::emergency"]
+		}]`)
+	})
+	labels, err := gitlab.CurrentChangeLabels("change::")
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"change::emergency"}, labels)
+}
