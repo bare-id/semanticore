@@ -1,5 +1,15 @@
 # Changelog
 
+## Version v0.10.0 (2026-10-09)
+
+### Features
+
+- deduct change-labels also for emergency changes (96519ffa)
+
+### Chores and tidying
+
+- **deps:** update golang deps to most recent versions (4bdc377b)
+
 ## Version v0.9.0 (2026-09-11)
 
 ### Features
@@ -95,9 +105,3 @@
 
 - **deps:** update actions/checkout action to v4 (108a7c2f)
 - **deps:** update actions/setup-go action to v4 (d0777ccd)
-
-## Version v0.5.1 (2022-11-22)
-
-### Fixes
-
-- let fallback helper return the actual value (d3528fcb)
