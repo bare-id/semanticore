@@ -15,15 +15,18 @@ type Gitlab struct {
 	server string
 	token  string
 	repo   string
+	// releaseBranch is the bot-managed source branch of the release merge request
+	releaseBranch string
 }
 
 var _ Backend = Gitlab{}
 
-func NewGitlabBackend(token, server, repo string) Gitlab {
+func NewGitlabBackend(token, server, repo, releaseBranch string) Gitlab {
 	return Gitlab{
-		server: "https://" + server,
-		token:  token,
-		repo:   repo,
+		server:        "https://" + server,
+		token:         token,
+		repo:          repo,
+		releaseBranch: releaseBranch,
 	}
 }
 
@@ -66,12 +69,12 @@ func (gitlab Gitlab) findOpenMergeRequest() (int, []string, error) {
 		Labels       []string `json:"labels"`
 	}
 
-	if err := gitlab.request(http.MethodGet, fmt.Sprintf("projects/%s/merge_requests?state=opened&source_branch=semanticore%%2frelease", url.PathEscape(gitlab.repo)), http.StatusOK, nil, &mrs); err != nil {
+	if err := gitlab.request(http.MethodGet, fmt.Sprintf("projects/%s/merge_requests?state=opened&source_branch=%s", url.PathEscape(gitlab.repo), url.QueryEscape(gitlab.releaseBranch)), http.StatusOK, nil, &mrs); err != nil {
 		return 0, nil, fmt.Errorf("unable to get merge requests: %w", err)
 	}
 
 	for _, mr := range mrs {
-		if mr.SourceBranch == "semanticore/release" && mr.State == "opened" {
+		if mr.SourceBranch == gitlab.releaseBranch && mr.State == "opened" {
 			log.Printf("[gitlab] merge request found: %d", mr.IID)
 			return mr.IID, mr.Labels, nil
 		}
@@ -101,7 +104,7 @@ func (gitlab Gitlab) MergeRequest(target, title, description, labels string) err
 	}
 
 	data := make(url.Values)
-	data.Set("source_branch", "semanticore/release")
+	data.Set("source_branch", gitlab.releaseBranch)
 	data.Set("target_branch", target)
 	data.Set("title", title)
 	data.Set("description", description)

@@ -98,6 +98,29 @@ If none of these is set, Semanticore will use `Semanticore Bot` as name and `sem
 To configure the name of the changelog file, you can use the `CHANGELOG_FILE_NAME`. environment variable. If this variable is not set,
 the default value `Changelog.md` will be used.
 
+### Hotfix releases
+
+To release from a maintenance branch such as `hotfix/1.2`, run Semanticore on that branch with
+`SEMANTICORE_TARGET_BRANCH` (or `-target-branch`) set to the branch name. The release merge request
+then targets that branch and uses its own bot branch (`semanticore/release-hotfix-1.2`), so it does not
+interfere with the main release merge request. Leave it unset for the main branch.
+
+GitLab CI:
+```yaml
+semanticore-hotfix:
+  extends: semanticore
+  variables:
+    SEMANTICORE_TARGET_BRANCH: $CI_COMMIT_BRANCH
+  only:
+    - /^hotfix\/.*$/
+```
+
+GitHub Actions: add `hotfix/**` to `on.push.branches` and set
+`SEMANTICORE_TARGET_BRANCH: ${{ github.ref_name != 'main' && github.ref_name || '' }}`.
+
+Merge the hotfix branch back into main after releasing. Otherwise main computes its next version
+without seeing the hotfix tag and may try to create the same tag again.
+
 ### Change label synchronization
 
 Semanticore can propagate a `change::...` label to the release MR/PR.

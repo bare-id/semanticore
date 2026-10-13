@@ -15,15 +15,18 @@ type Github struct {
 	server string
 	token  string
 	repo   string
+	// releaseBranch is the bot-managed head branch of the release pull request
+	releaseBranch string
 }
 
 var _ Backend = Github{}
 
-func NewGithubBackend(token, repo string) Github {
+func NewGithubBackend(token, repo, releaseBranch string) Github {
 	return Github{
-		server: "https://api.github.com",
-		token:  token,
-		repo:   repo,
+		server:        "https://api.github.com",
+		token:         token,
+		repo:          repo,
+		releaseBranch: releaseBranch,
 	}
 }
 
@@ -76,7 +79,7 @@ func (github Github) findOpenMergeRequest() (int, error) {
 	}
 
 	for _, mr := range mrs {
-		if mr.Head.Ref == "semanticore/release" && mr.State == "open" {
+		if mr.Head.Ref == github.releaseBranch && mr.State == "open" {
 			log.Printf("[Github] merge request found: %d", mr.IID)
 			return mr.IID, nil
 		}
@@ -125,7 +128,7 @@ func (github Github) MergeRequest(target, title, description, labels string) err
 		}
 		return github.syncPullRequestChangeLabels(iid, labels)
 	}
-	data.Head = "semanticore/release"
+	data.Head = github.releaseBranch
 	var created struct {
 		IID int `json:"number"`
 	}

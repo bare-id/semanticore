@@ -136,3 +136,8 @@ func TestParseCSVList(t *testing.T) {
 	assert.Empty(t, parseCSVList(""))
 	assert.Empty(t, parseCSVList(" , , "))
 }
+
+func TestReleaseBranchFor(t *testing.T) {
+	assert.Equal(t, "semanticore/release", releaseBranchFor(""))
+	assert.Equal(t, "semanticore/release-hotfix-1.2", releaseBranchFor("hotfix/1.2"))
+}
