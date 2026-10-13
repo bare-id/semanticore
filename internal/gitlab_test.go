@@ -14,7 +14,7 @@ func TestGitlab(t *testing.T) {
 	testserver := httptest.NewServer(testmux)
 	defer testserver.Close()
 
-	gitlab := NewGitlabBackend("test-token", "server", "my/test/repo")
+	gitlab := NewGitlabBackend("test-token", "server", "my/test/repo", "semanticore/release")
 
 	gitlab.server = testserver.URL
 	assert.Error(t, gitlab.request(http.MethodGet, "notfound", http.StatusAccepted, nil, nil))
@@ -97,7 +97,7 @@ func TestGitlabCommitMergeRequestAndRelatedCommits(t *testing.T) {
 	testserver := httptest.NewServer(testmux)
 	defer testserver.Close()
 
-	gitlab := NewGitlabBackend("test-token", "server", "my/test/repo")
+	gitlab := NewGitlabBackend("test-token", "server", "my/test/repo", "semanticore/release")
 	gitlab.server = testserver.URL
 
 	testmux.HandleFunc("/api/v4/projects/my%2ftest%2frepo/repository/commits/sha-no-mr/merge_requests", func(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +132,7 @@ func TestGitlabCurrentChangeLabels(t *testing.T) {
 	testserver := httptest.NewServer(testmux)
 	defer testserver.Close()
 
-	gitlab := NewGitlabBackend("test-token", "server", "my/test/repo")
+	gitlab := NewGitlabBackend("test-token", "server", "my/test/repo", "semanticore/release")
 	gitlab.server = testserver.URL
 
 	testmux.HandleFunc("/api/v4/projects/my%2ftest%2frepo/merge_requests", func(w http.ResponseWriter, r *http.Request) {

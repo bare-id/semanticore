@@ -15,7 +15,7 @@ func TestGithub(t *testing.T) {
 	testserver := httptest.NewServer(testmux)
 	defer testserver.Close()
 
-	github := NewGithubBackend("test-token", "my/testrepo")
+	github := NewGithubBackend("test-token", "my/testrepo", "semanticore/release")
 
 	github.server = testserver.URL
 	assert.Error(t, github.request(http.MethodGet, "notfound", http.StatusAccepted, nil, nil))
@@ -110,7 +110,7 @@ func TestGithubCommitMergeRequestAndRelatedCommits(t *testing.T) {
 	testserver := httptest.NewServer(testmux)
 	defer testserver.Close()
 
-	github := NewGithubBackend("test-token", "my/testrepo")
+	github := NewGithubBackend("test-token", "my/testrepo", "semanticore/release")
 	github.server = testserver.URL
 
 	testmux.HandleFunc("/repos/my/testrepo/commits/sha-no-pr/pulls", func(w http.ResponseWriter, r *http.Request) {
@@ -145,7 +145,7 @@ func TestGithubCurrentChangeLabels(t *testing.T) {
 	testserver := httptest.NewServer(testmux)
 	defer testserver.Close()
 
-	github := NewGithubBackend("test-token", "my/testrepo")
+	github := NewGithubBackend("test-token", "my/testrepo", "semanticore/release")
 	github.server = testserver.URL
 
 	testmux.HandleFunc("/repos/my/testrepo/pulls", func(w http.ResponseWriter, r *http.Request) {
