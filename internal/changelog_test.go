@@ -4,6 +4,8 @@ import (
 	_ "embed"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 //go:embed test/Changelog.md
@@ -32,4 +34,26 @@ func TestTrimChangelog(t *testing.T) {
 			t.Fail()
 		}
 	}
+}
+
+func TestExtractChangelogSection(t *testing.T) {
+	content := []byte("# Changelog\n\n## Version v1.2.0 (2026-01-02)\n\nfeatures\n\n## Version v1.1.0 (2026-01-01)\n\nfixes\n")
+
+	section, err := ExtractChangelogSection(content, "v1.2.0")
+	assert.NoError(t, err)
+	assert.Equal(t, "## Version v1.2.0 (2026-01-02)\n\nfeatures", section)
+
+	// version without the "v" prefix still matches
+	section, err = ExtractChangelogSection(content, "1.1.0")
+	assert.NoError(t, err)
+	assert.Equal(t, "## Version v1.1.0 (2026-01-01)\n\nfixes", section)
+
+	// unknown version falls back to the most recent (topmost) section
+	section, err = ExtractChangelogSection(content, "v9.9.9")
+	assert.NoError(t, err)
+	assert.Equal(t, "## Version v1.2.0 (2026-01-02)\n\nfeatures", section)
+
+	// no "## Version" sections at all
+	_, err = ExtractChangelogSection([]byte("# Changelog\n"), "v1.2.0")
+	assert.Error(t, err)
 }
