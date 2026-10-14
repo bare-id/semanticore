@@ -267,3 +267,20 @@ semanticore:
 ```
 
 Make sure you set the repositories clone depth too a large enough value, the default of `50` might be too low.
+
+Tags from branches that were never merged back (e.g. a hotfix release `v0.1.3` while `main` is at `v0.1.2`) are taken into account, so the next release on `main` becomes `v0.1.4` - this requires those tags to be fetched in the CI clone (`GIT_DEPTH: 0` on Gitlab, `fetch-depth: 0` on Github).
+
+To keep `git describe` based build versions (e.g. [git-describe-semver](https://github.com/choffmeister/git-describe-semver)) in line, merge hotfix branches back into `main` with a merge commit - `git merge --no-ff -s ours hotfix/...` if the fix was already cherry-picked. Builds on `main` then continue with `v0.1.4-dev...` instead of `v0.1.3-dev...`. Squash or rebase merges create new commits and don't make the hotfix tag reachable.
+
+### Build versions
+
+`semanticore describe` prints a version for regular (non-release) builds, based on the same logic as the releases, so it can replace `git describe` based tools such as git-describe-semver:
+
+```sh
+VERSION=$(go run github.com/bare-id/semanticore@v0 describe)
+```
+
+- on a released commit it prints the version itself, e.g. `v0.1.2`
+- otherwise it prints a prerelease of the next release, e.g. `v0.2.0-dev.3.g1a2b3c4` if `feat` commits are pending - tags from hotfix branches are taken into account as well
+
+Pass `--major` if your release pipeline does, so both agree. No token or remote is needed, but the tags have to be fetched (see clone depth above).

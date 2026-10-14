@@ -82,7 +82,16 @@ func ReadRepositoryWithPrefix(repo *git.Repository, createMajor bool, labelPrefi
 		return nil, fmt.Errorf("unable to read repo tags: %w", err)
 	}
 
+	vregex := regexp.MustCompile(`(v?)(\d+).(\d+).(\d+)`)
+	// all tagged versions, including ones on branches not reachable from HEAD (e.g. hotfix)
+	taken := map[[3]int]struct{}{}
 	err = gittags.ForEach(func(r *plumbing.Reference) error {
+		if match := vregex.FindStringSubmatch(r.Name().String()); match != nil {
+			major, _ := strconv.Atoi(match[2])
+			minor, _ := strconv.Atoi(match[3])
+			patch, _ := strconv.Atoi(match[4])
+			taken[[3]int{major, minor, patch}] = struct{}{}
+		}
 		tag, _ := repo.TagObject(r.Hash())
 		if tag != nil {
 			tags[tag.Target.String()] = append(tags[tag.Target.String()], r)
@@ -102,7 +111,6 @@ func ReadRepositoryWithPrefix(repo *git.Repository, createMajor bool, labelPrefi
 		return nil, fmt.Errorf("unable to read repository log: %w", err)
 	}
 
-	vregex := regexp.MustCompile(`(v?)(\d+).(\d+).(\d+)`)
 	var ancestor *object.Commit
 	_ = glog.ForEach(func(c *object.Commit) error {
 		if tags, ok := tags[c.Hash.String()]; ok {
@@ -263,6 +271,13 @@ func ReadRepositoryWithPrefix(repo *git.Repository, createMajor bool, labelPrefi
 		repository.Minor++
 		repository.Patch = 0
 	} else {
+		repository.Patch++
+	}
+	// skip versions already tagged elsewhere, e.g. v0.1.3 released from a hotfix branch
+	for {
+		if _, ok := taken[[3]int{repository.Major, repository.Minor, repository.Patch}]; !ok {
+			break
+		}
 		repository.Patch++
 	}
 
@@ -502,4 +517,17 @@ func (repository *Repository) Changelog() string {
 
 func (repository *Repository) Version() string {
 	return fmt.Sprintf("%s%d.%d.%d", repository.VPrefix, repository.Major, repository.Minor, repository.Patch)
+}
+
+// Describe returns the build version: the release itself, or a prerelease of the next release
+func (repository *Repository) Describe(head plumbing.Hash) string {
+	if len(repository.commits) == 0 {
+		return repository.Version()
+	}
+	version := repository.Version()
+	if repository.changelog == "" {
+		// only merge commits since the release, keep the prerelease above it
+		version = fmt.Sprintf("%s%d.%d.%d", repository.VPrefix, repository.Major, repository.Minor, repository.Patch+1)
+	}
+	return fmt.Sprintf("%s-dev.%d.g%s", version, len(repository.commits), head.String()[:7])
 }

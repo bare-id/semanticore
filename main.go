@@ -54,6 +54,11 @@ var (
 func main() {
 	flag.Parse()
 
+	describe := flag.Arg(0) == "describe"
+	if describe {
+		try(flag.CommandLine.Parse(flag.Args()[1:])) // allow flags after the subcommand, e.g. --major
+	}
+
 	dir := "."
 	if flag.NArg() > 0 {
 		dir = flag.Arg(0)
@@ -62,6 +67,15 @@ func main() {
 
 	repo, err := git.PlainOpen(".")
 	try(err)
+
+	if describe {
+		repository, err := internal.ReadRepository(repo, *createMajor)
+		try(err)
+		head, err := repo.Head()
+		try(err)
+		fmt.Println(repository.Describe(head.Hash()))
+		return
+	}
 
 	remote, err := repo.Remote("origin")
 	try(err)

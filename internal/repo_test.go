@@ -10,6 +10,7 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/go-git/go-git/v5/storage/memory"
 	"github.com/stretchr/testify/assert"
 )
@@ -173,6 +174,106 @@ func TestReadRepository(t *testing.T) {
 	assert.Equal(t, 0, repository.Major)
 	assert.Equal(t, 1, repository.Minor)
 	assert.Equal(t, 0, repository.Patch)
+}
+
+func TestReadRepositorySkipsVersionTaggedOnHotfixBranch(t *testing.T) {
+	for _, tc := range []struct{ msg, want string }{
+		{"fix: on main", "v0.1.4"},
+		{"feat: on main", "v0.2.0"},
+	} {
+		t.Run(tc.msg, func(t *testing.T) {
+			mockRepo, err := git.Init(memory.NewStorage(), memfs.New())
+			assert.NoError(t, err)
+			mockWt, err := mockRepo.Worktree()
+			assert.NoError(t, err)
+			sig := &object.Signature{Name: "testing", Email: "testing@example.com"}
+			testCommit := func(msg string) plumbing.Hash {
+				file, err := mockWt.Filesystem.Create("test.file")
+				assert.NoError(t, err)
+				_, err = file.Write([]byte(msg))
+				assert.NoError(t, err)
+				assert.NoError(t, file.Close())
+				_, err = mockWt.Add("test.file")
+				assert.NoError(t, err)
+				hash, err := mockWt.Commit(msg, &git.CommitOptions{Author: sig})
+				assert.NoError(t, err)
+				return hash
+			}
+
+			_, err = mockRepo.CreateTag("v0.1.2", testCommit("chore: base"), nil)
+			assert.NoError(t, err)
+			head, err := mockRepo.Head()
+			assert.NoError(t, err)
+
+			assert.NoError(t, mockWt.Checkout(&git.CheckoutOptions{Branch: plumbing.NewBranchReferenceName("hotfix"), Create: true}))
+			_, err = mockRepo.CreateTag("v0.1.3", testCommit("fix: hotfix"), nil)
+			assert.NoError(t, err)
+			assert.NoError(t, mockWt.Checkout(&git.CheckoutOptions{Branch: head.Name()}))
+
+			hash := testCommit(tc.msg)
+
+			repository, err := ReadRepository(mockRepo, true)
+			assert.NoError(t, err)
+			assert.Equal(t, "v0.1.2", repository.Latest)
+			assert.Equal(t, tc.want, repository.Version())
+			assert.Contains(t, repository.Changelog(), "## Version "+tc.want)
+			assert.Equal(t, tc.want+"-dev.1.g"+hash.String()[:7], repository.Describe(hash))
+		})
+	}
+}
+
+func TestDescribe(t *testing.T) {
+	mockRepo, err := git.Init(memory.NewStorage(), memfs.New())
+	assert.NoError(t, err)
+	mockWt, err := mockRepo.Worktree()
+	assert.NoError(t, err)
+	sig := &object.Signature{Name: "testing", Email: "testing@example.com"}
+	testCommit := func(msg string) plumbing.Hash {
+		file, err := mockWt.Filesystem.Create("test.file")
+		assert.NoError(t, err)
+		_, err = file.Write([]byte(msg))
+		assert.NoError(t, err)
+		assert.NoError(t, file.Close())
+		_, err = mockWt.Add("test.file")
+		assert.NoError(t, err)
+		hash, err := mockWt.Commit(msg, &git.CommitOptions{Author: sig})
+		assert.NoError(t, err)
+		return hash
+	}
+	describe := func() string {
+		repository, err := ReadRepository(mockRepo, true)
+		assert.NoError(t, err)
+		head, err := mockRepo.Head()
+		assert.NoError(t, err)
+		return repository.Describe(head.Hash())
+	}
+
+	hash := testCommit("chore: base")
+	_, err = mockRepo.CreateTag("v0.1.2", hash, nil)
+	assert.NoError(t, err)
+	assert.Equal(t, "v0.1.2", describe(), "on tag")
+
+	hash = testCommit("fix: something")
+	assert.Equal(t, "v0.1.3-dev.1.g"+hash.String()[:7], describe(), "fix")
+
+	hash = testCommit("feat: something")
+	assert.Equal(t, "v0.2.0-dev.2.g"+hash.String()[:7], describe(), "feat")
+
+	testCommit("Release v0.2.0")
+	assert.Equal(t, "v0.2.0", describe(), "untagged release commit")
+
+	// a merge commit only (e.g. merging a hotfix branch back) must still sort above the release
+	head, err := mockRepo.Head()
+	assert.NoError(t, err)
+	headCommit, err := mockRepo.CommitObject(head.Hash())
+	assert.NoError(t, err)
+	merge := &object.Commit{Author: *sig, Committer: *sig, Message: "Merge branch 'hotfix'", TreeHash: headCommit.TreeHash, ParentHashes: []plumbing.Hash{head.Hash(), headCommit.ParentHashes[0]}}
+	obj := mockRepo.Storer.NewEncodedObject()
+	assert.NoError(t, merge.Encode(obj))
+	hash, err = mockRepo.Storer.SetEncodedObject(obj)
+	assert.NoError(t, err)
+	assert.NoError(t, mockRepo.Storer.SetReference(plumbing.NewHashReference(head.Name(), hash)))
+	assert.Equal(t, "v0.2.1-dev.1.g"+hash.String()[:7], describe(), "merge only")
 }
 
 func TestCollectIssuePrefixedLabels(t *testing.T) {
