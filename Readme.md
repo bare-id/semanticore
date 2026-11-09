@@ -98,6 +98,22 @@ If none of these is set, Semanticore will use `Semanticore Bot` as name and `sem
 To configure the name of the changelog file, you can use the `CHANGELOG_FILE_NAME`. environment variable. If this variable is not set,
 the default value `Changelog.md` will be used.
 
+### Release hook
+
+To update more files in the release commit (version constants, Helm charts, lockfiles, ...), set
+`SEMANTICORE_RELEASE_HOOK` (or `-release-hook`) to a shell command. It runs via `sh -c` in the repository
+root right before the release commit, with `SEMANTICORE_VERSION` set to the new version (`X.Y.Z`, without
+`v` prefix). Every file the command creates, modifies, deletes or renames is committed together with the
+changelog. Untracked files that existed before the hook and files matched by `.gitignore` are left out.
+A non-zero exit code fails the job.
+
+The hook inherits the job's full environment, including `SEMANTICORE_TOKEN`. Only run trusted commands, and
+be careful with tools that fetch and execute third-party code (e.g. `npx`, `go run` with external modules).
+
+```yaml
+SEMANTICORE_RELEASE_HOOK: 'sed -i "s/^version:.*/version: $SEMANTICORE_VERSION/" chart/Chart.yaml'
+```
+
 ### Hotfix releases
 
 To release from a maintenance branch such as `hotfix/1.2`, run Semanticore on that branch with

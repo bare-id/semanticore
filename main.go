@@ -38,6 +38,7 @@ var (
 	committerEmail          = flag.String("git-committer-email", emptyFallback(os.Getenv("GIT_COMMITTER_EMAIL"), "semanticore@aoe.com"), "committer email for the git commits, falls back to env var GIT_COMMITTER_EMAIL and afterwards to \"semanticore@aoe.com\"")
 	changelogMaxLines       = flag.Int("changelog-max-lines", 0, "trim the changelog to the last version including the maximum configured lines")
 	changelogFileName       = flag.String("changelog-file-name", emptyFallback(os.Getenv("CHANGELOG_FILE_NAME"), "Changelog.md"), "filename for changelog, falls back to env var CHANGELOG_FILE_NAME and afterwards to \"Changelog.md\"")
+	releaseHook             = flag.String("release-hook", os.Getenv("SEMANTICORE_RELEASE_HOOK"), "shell command run via `sh -c` in the repository before the release commit with SEMANTICORE_VERSION=X.Y.Z set; files it changes are committed, falls back to env var SEMANTICORE_RELEASE_HOOK")
 	signKeyFilePath         = flag.String("sign-key-file", emptyFallback(os.Getenv("SEMANTICORE_SIGN_KEY_FILE"), ""), "path to GPG private key file for signing commits")
 	changeLabelsEnabled     = flag.Bool("change-labels-enabled", strings.EqualFold(os.Getenv("SEMANTICORE_CHANGE_LABELS_ENABLED"), "true"), "enable change label sync for merge requests")
 	changeLabels            = flag.String("change-labels", emptyFallback(os.Getenv("SEMANTICORE_CHANGE_LABELS"), ""), "CSV list of labels in priority order (highest first), e.g. change::emergency,change::major,change::normal,change::standard")
@@ -161,6 +162,7 @@ func main() {
 	try(err)
 
 	hook.NpmUpdateVersionHook(wt, repository)
+	try(hook.ReleaseScriptHook(wt, repository, *releaseHook))
 
 	signKey, err := internal.TryCreateSignKey(signKeyFilePath)
 	if errors.Is(err, internal.ErrNoSigningKeyFound) {
