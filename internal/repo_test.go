@@ -617,3 +617,24 @@ func TestCollectEmergencySignalsDisabledWithoutLabel(t *testing.T) {
 	repo.CollectEmergencySignals(nil, cfg)
 	assert.Empty(t, repo.changeLabels)
 }
+
+func TestLabeledChangelog(t *testing.T) {
+	repo := &Repository{
+		Features:  []string{"new feat"},
+		fixes:     []string{"a fix"},
+		security:  []string{"a sec fix"},
+		changelog: "## Version v1.1.0\n\n### Features\n\n- new feat\n\n### Security Fixes\n\n- a sec fix\n\n### Fixes\n\n- a fix\n\n",
+	}
+
+	labeled := repo.LabeledChangelog(map[string]string{"fix": "change::normal", "feat": "change::normal", "chore": "change::standard"})
+	assert.Contains(t, labeled, "### Features change::normal\n")
+	assert.Contains(t, labeled, "### Fixes change::normal\n")
+	assert.Contains(t, labeled, "### Security Fixes\n")
+	assert.NotContains(t, labeled, "change::standard")
+
+	// first alias in sorted order wins
+	labeled = repo.LabeledChangelog(map[string]string{"feat": "change::normal", "feature": "change::standard"})
+	assert.Contains(t, labeled, "### Features change::normal\n")
+
+	assert.Equal(t, repo.changelog, repo.LabeledChangelog(map[string]string{}))
+}

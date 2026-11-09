@@ -6,6 +6,7 @@ import (
 	"log"
 	"path"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -481,30 +482,56 @@ func (repository *Repository) DetermineChangeLabel(priority []string, semanticMa
 }
 
 func (repository *Repository) hasSemanticType(semanticType string) bool {
+	_, logs := repository.semanticSection(semanticType)
+	return len(logs) > 0
+}
+
+// semanticSection maps a semantic commit type (or alias) to its changelog heading and entries
+func (repository *Repository) semanticSection(semanticType string) (string, []string) {
 	switch strings.ToLower(strings.TrimSpace(semanticType)) {
 	case "feat", "feature", "features":
-		return len(repository.Features) > 0
+		return "### Features", repository.Features
 	case "fix", "bug", "bugs":
-		return len(repository.fixes) > 0
+		return "### Fixes", repository.fixes
 	case "test", "tests":
-		return len(repository.tests) > 0
+		return "### Tests", repository.tests
 	case "chore", "chores", "update", "updates":
-		return len(repository.chores) > 0
+		return "### Chores and tidying", repository.chores
 	case "ops", "ci", "cd", "build":
-		return len(repository.ops) > 0
+		return "### Ops and CI/CD", repository.ops
 	case "doc", "docs", "documentation":
-		return len(repository.docs) > 0
+		return "### Documentation", repository.docs
 	case "perf", "performance":
-		return len(repository.perf) > 0
+		return "### Performance", repository.perf
 	case "refactor", "rework":
-		return len(repository.refactor) > 0
+		return "### Refactoring", repository.refactor
 	case "sec", "security":
-		return len(repository.security) > 0
+		return "### Security Fixes", repository.security
 	case "other":
-		return len(repository.other) > 0
+		return "### Other", repository.other
 	default:
-		return false
+		return "", nil
 	}
+}
+
+// LabeledChangelog returns the changelog with each heading suffixed by the change label its semantic type maps to
+func (repository *Repository) LabeledChangelog(semanticMap map[string]string) string {
+	types := make([]string, 0, len(semanticMap))
+	for semanticType := range semanticMap {
+		types = append(types, semanticType)
+	}
+	sort.Strings(types)
+
+	changelog := repository.changelog
+	for _, semanticType := range types {
+		title, logs := repository.semanticSection(semanticType)
+		if len(logs) == 0 {
+			continue
+		}
+		// first alias wins: an already labeled heading no longer matches title+"\n"
+		changelog = strings.Replace(changelog, title+"\n", title+" "+semanticMap[semanticType]+"\n", 1)
+	}
+	return changelog
 }
 
 func (repository *Repository) Release(backend Backend) error {
