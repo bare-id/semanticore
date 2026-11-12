@@ -259,6 +259,13 @@ func ReadRepositoryWithPrefix(repo *git.Repository, createMajor bool, labelPrefi
 		updates++
 	}
 
+	if ancestor == nil && repository.unreleased == "" {
+		// a shallow clone may just hide the last release, don't silently start over at v0.0.1
+		if shallow, err := repo.Storer.Shallow(); err == nil && len(shallow) > 0 {
+			return nil, errors.New("no version tag or release commit found in shallow clone, increase the clone depth (GIT_DEPTH) or fetch tags")
+		}
+	}
+
 	if updates == 0 {
 		return repository, nil
 	}
