@@ -282,7 +282,7 @@ semanticore:
     - main
 ```
 
-Make sure you set the repositories clone depth too a large enough value, the default of `50` might be too low.
+Make sure you set the repositories clone depth too a large enough value, the default of `50` might be too low. If a shallow clone contains neither a version tag nor a release commit, semanticore exits with an error instead of starting over at `v0.0.1`.
 
 Tags from branches that were never merged back (e.g. a hotfix release `v0.1.3` while `main` is at `v0.1.2`) are taken into account, so the next release on `main` becomes `v0.1.4` - this requires those tags to be fetched in the CI clone (`GIT_DEPTH: 0` on Gitlab, `fetch-depth: 0` on Github).
 

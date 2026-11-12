@@ -222,6 +222,39 @@ func TestReadRepositorySkipsVersionTaggedOnHotfixBranch(t *testing.T) {
 	}
 }
 
+func TestReadRepositoryFailsOnShallowCloneWithoutVersion(t *testing.T) {
+	mockRepo, err := git.Init(memory.NewStorage(), memfs.New())
+	assert.NoError(t, err)
+	mockWt, err := mockRepo.Worktree()
+	assert.NoError(t, err)
+	sig := &object.Signature{Name: "testing", Email: "testing@example.com"}
+	file, err := mockWt.Filesystem.Create("test.file")
+	assert.NoError(t, err)
+	var hash plumbing.Hash
+	for _, msg := range []string{"chore: base", "fix: something"} {
+		_, err = file.Write([]byte(msg))
+		assert.NoError(t, err)
+		_, err = mockWt.Add("test.file")
+		assert.NoError(t, err)
+		hash, err = mockWt.Commit(msg, &git.CommitOptions{Author: sig})
+		assert.NoError(t, err)
+	}
+
+	repository, err := ReadRepository(mockRepo, true)
+	assert.NoError(t, err, "full history without tags is a first release")
+	assert.Equal(t, "v0.0.1", repository.Version())
+
+	assert.NoError(t, mockRepo.Storer.SetShallow([]plumbing.Hash{hash}))
+	_, err = ReadRepository(mockRepo, true)
+	assert.ErrorContains(t, err, "shallow clone")
+
+	_, err = mockRepo.CreateTag("v0.1.2", hash, nil)
+	assert.NoError(t, err)
+	repository, err = ReadRepository(mockRepo, true)
+	assert.NoError(t, err, "shallow clone with a reachable tag")
+	assert.Equal(t, "v0.1.2", repository.Version())
+}
+
 func TestDescribe(t *testing.T) {
 	mockRepo, err := git.Init(memory.NewStorage(), memfs.New())
 	assert.NoError(t, err)
