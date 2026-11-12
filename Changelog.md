@@ -1,5 +1,11 @@
 # Changelog
 
+## Version v0.12.0 (2026-11-12)
+
+### Features
+
+- add release-hook to update files in the release commit (f77d1f26)
+
 ## Version v0.11.0 (2026-10-14)
 
 ### Features
