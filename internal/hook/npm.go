@@ -45,7 +45,7 @@ func NpmUpdateVersionHook(wt *git.Worktree, repository *internal.Repository) {
 		log.Printf("npm-update-version: error parsing json: %s", err)
 		return
 	}
-	packagejsonRegexp := regexp.MustCompile(`"version"\s*:\s*"` + jsonData.Version + `"`)
+	packagejsonRegexp := regexp.MustCompile(`"version"\s*:\s*"` + regexp.QuoteMeta(jsonData.Version) + `"`)
 	contents = packagejsonRegexp.ReplaceAll(contents, []byte(fmt.Sprintf(`"version": "%d.%d.%d"`, repository.Major, repository.Minor, repository.Patch)))
 
 	f, err = wt.Filesystem.Create(packagejson)
