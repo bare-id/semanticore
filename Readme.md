@@ -107,7 +107,7 @@ root right before the release commit, with `SEMANTICORE_VERSION` set to the new 
 changelog. Untracked files that existed before the hook and files matched by `.gitignore` are left out.
 A non-zero exit code fails the job.
 
-The hook inherits the job's full environment, including `SEMANTICORE_TOKEN`. Only run trusted commands, and
+The hook inherits the job's full environment, including `SEMANTICORE_TOKEN` and `SEMANTICORE_SIGN_KEY`. Only run trusted commands, and
 be careful with tools that fetch and execute third-party code (e.g. `npx`, `go run` with external modules).
 
 ```yaml

@@ -79,3 +79,25 @@ func TestNpmUpdateVersionHook(t *testing.T) {
 	assert.Equal(t, "4.5.6", jsonData.Version, "json content does not match: %s", b)
 	assert.Equal(t, "1.2.3", jsonData.Dependencies.Foo, "dependency version was updated: %s", b)
 }
+
+func TestNpmUpdateVersionHookRegexMetaVersion(t *testing.T) {
+	mockRepo, err := git.Init(memory.NewStorage(), memfs.New())
+	assert.NoError(t, err)
+	mockWt, err := mockRepo.Worktree()
+	assert.NoError(t, err)
+
+	packagejson = "package.json"
+	f, err := mockWt.Filesystem.Create("package.json")
+	assert.NoError(t, err)
+	_, err = f.Write([]byte(`{"version": "1.0.0-(beta"}`))
+	assert.NoError(t, err)
+	assert.NoError(t, f.Close())
+
+	NpmUpdateVersionHook(mockWt, &internal.Repository{Major: 2})
+
+	f, err = mockWt.Filesystem.Open("package.json")
+	assert.NoError(t, err)
+	b, _ := io.ReadAll(f)
+	assert.NoError(t, f.Close())
+	assert.Equal(t, `{"version": "2.0.0"}`, string(b))
+}

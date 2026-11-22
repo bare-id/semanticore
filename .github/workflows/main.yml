@@ -47,7 +47,7 @@ jobs:
           output: both
           thresholds: '50 75'
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: github.event_name == 'pull_request'
         with:
           name: coverage-report
@@ -56,7 +56,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: echo ${{ github.event.number }} > pr-number.txt
       - name: Upload PR number
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: github.event_name == 'pull_request'
         with:
           name: pr-number
