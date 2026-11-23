@@ -123,7 +123,17 @@ func main() {
 		return
 	}
 
-	fmt.Println(changelog)
+	printed := changelog
+	if *changeLabelsEnabled {
+		if priority, ok := parseChangeLabels(*changeLabels); ok {
+			if _, defaultOk := parseChangeLabelDefault(*changeLabelDefault, priority); defaultOk {
+				if semanticMap, ok := parseChangeLabelMap(*changeLabelMap, priority); ok {
+					printed = repository.LabeledChangelog(semanticMap)
+				}
+			}
+		}
+	}
+	fmt.Println(printed)
 
 	if !*createMergeRequest {
 		return
@@ -267,6 +277,8 @@ func main() {
 				}
 
 				repository.ChangeLabel = repository.DetermineChangeLabel(priority, semanticMap, defaultLabel)
+				// changelog file is already committed, this only affects the release request description
+				changelog = repository.LabeledChangelog(semanticMap)
 				labels += "," + repository.ChangeLabel
 			} else {
 				log.Printf("[semanticore] change labels are enabled but SEMANTICORE_CHANGE_LABEL_MAP is invalid, disabling feature")

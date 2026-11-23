@@ -165,6 +165,9 @@ Each mapped label must be part of `SEMANTICORE_CHANGE_LABELS`, otherwise the fea
 
 When active, Semanticore always synchronizes only labels starting with `change::` and keeps all other labels untouched.
 
+With a valid map, the changelog headings printed to stdout and used in the release MR/PR description
+get the mapped label appended, e.g. `### Features change::normal`. The committed changelog file stays unlabeled.
+
 #### Downgrade protection
 
 By default (`SEMANTICORE_CHANGE_LABEL_POLICY=upgrade-only`), Semanticore never replaces a
