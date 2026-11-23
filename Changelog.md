@@ -1,5 +1,24 @@
 # Changelog
 
+## Version v0.12.0 (2026-11-23)
+
+### Features
+
+- add release-hook to update files in the release commit (f77d1f26)
+
+### Fixes
+
+- fail on shallow checkouts (c7c525c9)
+
+### Ops and CI/CD
+
+- harden ci config (f8948361)
+
+### Chores and tidying
+
+- **deps:** update actions/dependency-review-action action to v5.0.1 (3493a997)
+- **deps:** update golangci/golangci-lint-action digest to ba0d7d2 (51af7d16)
+
 ## Version v0.11.0 (2026-10-14)
 
 ### Features
