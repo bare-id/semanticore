@@ -1,5 +1,18 @@
 # Changelog
 
+## Version v0.12.1 (2026-11-23)
+
+### Documentation
+
+- extend ticket output to also reference change labels when configured (32383b57)
+
+### Chores and tidying
+
+- **deps:** update github artifact actions (#28) (1e43709b)
+- **deps:** update module github.com/golangci/golangci-lint/v2 to v2.15.0 (#27) (5171c698)
+- **deps:** update actions/setup-go action to v7.1.0 (01610e90)
+- **deps:** update dependency golangci/golangci-lint to v2.15.0 (46cd643b)
+
 ## Version v0.12.0 (2026-11-23)
 
 ### Features
@@ -90,24 +103,3 @@
 ### Fixes
 
 - **deps:** update module github.com/go-git/go-git/v5 to v5.16.2 (#77) (bfcea1b3)
-
-## Version v0.6.0 (2025-02-13)
-
-### Features
-
-- **changelog:** changelog-max-lines (e997da31)
-
-### Fixes
-
-- **deps:** update module github.com/go-git/go-git/v5 to v5.12.0 (#67) (1997f732)
-- **deps:** update module github.com/stretchr/testify to v1.9.0 (#70) (4d23fe38)
-
-### Ops and CI/CD
-
-- **github:** go min version 1.24 (197af1e1)
-- **github:** update ci and trim changelog (cf2d689e)
-
-### Chores and tidying
-
-- **go:** update dependencies (4376e075)
-- **deps:** update actions/setup-go action to v5 (#69) (5cd58d42)
