@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -53,7 +54,11 @@ func (github Github) request(method, endpoint string, expectedStatus int, body i
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != expectedStatus {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("expected status is %d: %v %s", expectedStatus, resp, string(b))
+		err := fmt.Errorf("expected status is %d: %v %s", expectedStatus, resp, string(b))
+		if resp.StatusCode == http.StatusNotFound {
+			return errors.Join(errNotFound, err)
+		}
+		return err
 	}
 	if target == nil {
 		return nil
@@ -251,18 +256,58 @@ func (github Github) IssuePrefixedLabels(id int, prefix string) ([]string, error
 	return out, nil
 }
 
+type githubRefBody struct {
+	Ref string `json:"ref"`
+	SHA string `json:"sha"`
+}
+
+type githubObject struct {
+	Object struct {
+		SHA  string `json:"sha"`
+		Type string `json:"type"`
+	} `json:"object"`
+}
+
+func (github Github) CreateTag(tag, ref string) error {
+	var existing githubObject
+	err := github.request(http.MethodGet, "/git/ref/tags/"+url.PathEscape(tag), http.StatusOK, nil, &existing)
+	if err == nil && existing.Object.Type == "tag" {
+		// annotated tag: the ref points to a tag object, which points to the commit
+		err = github.request(http.MethodGet, "/git/tags/"+existing.Object.SHA, http.StatusOK, nil, &existing)
+	}
+	if err == nil {
+		return checkExistingTag(tag, existing.Object.SHA, ref)
+	}
+	if !errors.Is(err, errNotFound) {
+		return fmt.Errorf("unable to look up tag %s: %w", tag, err)
+	}
+
+	data := githubRefBody{
+		Ref: "refs/tags/" + tag,
+		SHA: ref,
+	}
+	return github.request(http.MethodPost, "/git/refs", http.StatusCreated, data, nil)
+}
+
 type githubReleaseBody struct {
 	TagName              string `json:"tag_name"`
-	TargetCommitish      string `json:"target_commitish"`
 	Name                 string `json:"name"`
 	GenerateReleaseNotes bool   `json:"generate_release_notes"`
 	Body                 string `json:"body"`
 }
 
-func (github Github) Release(tag, ref, changelog string) error {
+func (github Github) CreateRelease(tag, changelog string) error {
+	err := github.request(http.MethodGet, "/releases/tags/"+url.PathEscape(tag), http.StatusOK, nil, nil)
+	if err == nil {
+		log.Printf("[semanticore] release %s already exists, nothing to do", tag)
+		return nil
+	}
+	if !errors.Is(err, errNotFound) {
+		return fmt.Errorf("unable to look up release %s: %w", tag, err)
+	}
+
 	data := githubReleaseBody{
 		TagName:              tag,
-		TargetCommitish:      ref,
 		Name:                 tag,
 		GenerateReleaseNotes: true,
 		Body:                 changelog,

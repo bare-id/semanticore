@@ -1,12 +1,27 @@
 package internal
 
 import (
+	"errors"
+	"fmt"
+	"log"
+
 	"github.com/go-git/go-git/v5/plumbing/transport"
 )
 
+var errNotFound = errors.New("not found")
+
+func checkExistingTag(tag, existingSHA, ref string) error {
+	if existingSHA != ref {
+		return fmt.Errorf("tag %s already exists on %s, expected %s", tag, existingSHA, ref)
+	}
+	log.Printf("[semanticore] tag %s already exists on %s, nothing to do", tag, ref)
+	return nil
+}
+
 type Backend interface {
 	transport.AuthMethod
-	Release(tag, ref, changelog string) error
+	CreateTag(tag, ref string) error
+	CreateRelease(tag, changelog string) error
 	MergeRequest(target, title, description, labels string) error
 	CloseMergeRequest() error
 	MainBranch() (string, error)

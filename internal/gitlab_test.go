@@ -76,13 +76,29 @@ func TestGitlab(t *testing.T) {
 	noMrs = true
 	assert.NoError(t, gitlab.MergeRequest("main", "Release v1.2.3", "release description", "tag1,tag2,change::major"))
 
+	posts := 0
 	testmux.HandleFunc("/api/v4/projects/my%2ftest%2frepo/repository/tags", func(w http.ResponseWriter, r *http.Request) {
+		posts++
 		w.WriteHeader(http.StatusCreated)
 	})
 	testmux.HandleFunc("/api/v4/projects/my%2ftest%2frepo/releases", func(w http.ResponseWriter, r *http.Request) {
+		posts++
 		w.WriteHeader(http.StatusCreated)
 	})
-	assert.NoError(t, gitlab.Release("v1.2.3", "abc123", "changelog"))
+	assert.NoError(t, gitlab.CreateTag("v1.2.3", "abc123"))
+	assert.NoError(t, gitlab.CreateRelease("v1.2.3", "changelog"))
+	assert.Equal(t, 2, posts)
+
+	testmux.HandleFunc("/api/v4/projects/my%2ftest%2frepo/repository/tags/v1.0.0", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{"commit": {"id": "abc123"}}`)
+	})
+	testmux.HandleFunc("/api/v4/projects/my%2ftest%2frepo/releases/v1.0.0", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = fmt.Fprint(w, `{}`)
+	})
+	assert.NoError(t, gitlab.CreateTag("v1.0.0", "abc123"))
+	assert.Error(t, gitlab.CreateTag("v1.0.0", "def456"))
+	assert.NoError(t, gitlab.CreateRelease("v1.0.0", "changelog"))
+	assert.Equal(t, 2, posts)
 
 	testmux.HandleFunc("/api/v4/projects/my%2ftest%2frepo", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, `{"default_branch": "main"}`)
